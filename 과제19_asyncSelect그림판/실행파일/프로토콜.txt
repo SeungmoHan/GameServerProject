@@ -1,0 +1,36 @@
+PORT : 25000
+
+// 헤더
+struct stHEADER
+{
+	unsigned short Len;
+};
+
+// 패킷
+struct st_DRAW_PACKET
+{
+	int		iStartX;	
+	int		iStartY;	
+	int		iEndX;	
+	int		iEndY;	
+}
+
+
+사용포트 25000
+
+2 byte - 패킷길이 16
+4 byte - Start X
+4 byte - Start Y
+4 byte - End X
+4 byte - End Y
+
+
+
+패킷의 총 사이즈는 18바이트
+
+
+# 자기 자신의 그리기도 서버로 패킷을 받아서 그림
+
+
+
+

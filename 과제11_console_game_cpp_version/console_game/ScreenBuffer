@@ -1,0 +1,26 @@
+#pragma once
+
+#ifndef __SCREEN_BUFFER__
+#define __SCREEN_BUFFER__
+
+constexpr int bufferHeight = 24;
+constexpr int bufferWidth = 81;
+
+
+class ScreenBuffer
+{
+public:
+	void DrawSprite(int x, int y, char c);
+	void DrawSprite(char b[bufferHeight][bufferWidth]);
+	void Flip();
+	static ScreenBuffer* GetInstance();
+private:
+	ScreenBuffer();
+	void ClearScreen();
+	void MoveCursor(int x, int y);
+	char screenBuffer[bufferHeight][bufferWidth];
+	static ScreenBuffer buffer;
+};
+
+
+#endif // !__SCREEN_BUFFER__
