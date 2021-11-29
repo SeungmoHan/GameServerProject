@@ -12,47 +12,50 @@ private:
 	template<typename ObjectType>
 	struct DataNode
 	{
+		ObjectFreeList<ObjectType>* underFlowGuard;
 		ObjectType object;
 		DataNode<ObjectType>* next;
-		ObjectFreeList<ObjectType>* parent;
 		bool useFlag;
+		ObjectFreeList<ObjectType>* overFlowGuard;
 	};
 public:
-	//생성자 프리리스트처럼 사용할수도있고 베이스를 오브젝트풀로두고 그 이후에 resizing해야될 경우 free list처럼 구현
-	ObjectFreeList(int blockNum = 0, bool placementNew = false) : capacity(blockNum), useCount(0), placementNew(placementNew), pFreeNode(nullptr), isMemoryPool(false), poolSize(blockNum)
+	//생성자 그냥 alloc을 n번 호출한것과 동일한효과 그 이후에 추가되는것도 free list처럼
+	ObjectFreeList(int blockNum = 0, bool placementNew = false) : capacity(blockNum), useCount(0), placementNew(placementNew), pFreeNode(nullptr)
 	{
 		//처음부터 free list라면 아무것도 해줄필요없음.
 		if (capacity == 0) return;
-
-		//그게 아니라면 메모리풀 베이스
-		isMemoryPool = true;
-		pFreeNode = new DataNode<ObjectType>[blockNum];
-		DataNode<ObjectType>* temp = pFreeNode;
+		//그게 아니라면 n번 alloc호출과 동일하게 만들어줘야됨 단 capacity만 증가되어야됨.
+		DataNode<ObjectType>* temp;
 		//배열이지만 리스트처럼 다음노드 연결
+		pFreeNode = (DataNode<ObjectType>*)malloc(sizeof(DataNode<ObjectType>));
+		if (pFreeNode == nullptr) CRASH();
+		pFreeNode->underFlowGuard = this;
+		pFreeNode->next = nullptr;
+		pFreeNode->overFlowGuard = this;
+		pFreeNode->useFlag = false;
 		for (int i = 0; i < blockNum - 1; i++)
 		{
-			temp->next = temp;
-			temp->parent = this;
+			temp = (DataNode<ObjectType>*)malloc(sizeof(DataNode<ObjectType>));
+			if (temp == nullptr) CRASH();
+			temp->next = pFreeNode;
+			temp->underFlowGuard = this;
+			temp->overFlowGuard = this;
 			temp->useFlag = false;
+			pFreeNode = temp;
 			temp++;
 		}
-		//마지막노드만 따로 널포인터 처리
-		temp->next = nullptr;
-		temp->parent = this;
-		temp->useFlag = false;
 	}
 	virtual ~ObjectFreeList() 
 	{
-		//DataNode<ObjectType>* tempNode = pFreeNode;
-		//if (isMemoryPool)
-		//{
-		//	tempNode += poolSize - 1;
-		//	delete pFreeNode;
-		//}
-		//while (pFreeNode != nullptr)
-		//{
-		//	delete pFreeNode;
-		//}
+		DataNode<ObjectType>* temp = pFreeNode;
+		while (temp != nullptr)
+		{
+			DataNode<ObjectType>* next = temp->next;
+			free(temp);
+			temp = next;
+			capacity--;
+		}
+		printf("capacity : %d", capacity);
 	};
 
 	ObjectType* Alloc()
@@ -63,10 +66,15 @@ public:
 			ObjectType* pObj = &pFreeNode->object;
 			pFreeNode = pFreeNode->next;
 			useCount++;
+			if (placementNew)
+			{
+				new(pObj) ObjectType;
+			}
 			return pObj;
 		}
 		DataNode<ObjectType>* newNode = new DataNode<ObjectType>();
-		newNode->parent = this;
+		newNode->overFlowGuard = this;
+		newNode->underFlowGuard = this;
 		newNode->useFlag = true;
 		ObjectType* pObj = &newNode->object;
 		useCount++;
@@ -75,22 +83,24 @@ public:
 	}
 	bool Free(ObjectType* pData)
 	{
-		DataNode<ObjectType>* temp = (DataNode<ObjectType>*)pData;
-		if (temp->parent != this) CRASH();
-		if (!temp->useFlag) CRASH();
+		char* temp = (char*)pData;
+		temp -= sizeof(ObjectFreeList<ObjectType>*);
+		DataNode<ObjectType>* tempNode = (DataNode<ObjectType>*)temp;
+		if (tempNode->overFlowGuard != this) CRASH();
+		if (tempNode->underFlowGuard != this) CRASH();
+		if (!tempNode->useFlag) CRASH();
 		if (useCount < 0) CRASH();
+		useCount--;
 		if (pFreeNode == nullptr)
 		{
-			pFreeNode = temp;
+			pFreeNode = tempNode;
 			pFreeNode->useFlag = false;
-			useCount--;
 			return true;
 		}
 
-		temp->next = pFreeNode;
-		pFreeNode = temp;
+		tempNode->next = pFreeNode;
+		pFreeNode = tempNode;
 		pFreeNode->useFlag = false;
-		useCount--;
 		return true;
 	}
 
@@ -98,9 +108,6 @@ public:
 	int GetUseCount() { return useCount; }
 
 private:
-
-	bool isMemoryPool;
-	int poolSize;
 	int capacity = 0;
 	int useCount = 0;
 	bool placementNew;
