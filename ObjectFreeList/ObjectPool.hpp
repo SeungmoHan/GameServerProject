@@ -26,7 +26,7 @@ public:
 		if (capacity == 0) return;
 		//그게 아니라면 n번 alloc호출과 동일하게 만들어줘야됨 단 capacity만 증가되어야됨.
 		DataNode<ObjectType>* temp;
-		//배열이지만 리스트처럼 다음노드 연결
+		// 리스트처럼 다음노드 연결
 		pFreeNode = (DataNode<ObjectType>*)malloc(sizeof(DataNode<ObjectType>));
 		if (pFreeNode == nullptr) CRASH();
 		pFreeNode->underFlowGuard = this;
@@ -36,6 +36,10 @@ public:
 		for (int i = 0; i < blockNum - 1; i++)
 		{
 			temp = (DataNode<ObjectType>*)malloc(sizeof(DataNode<ObjectType>));
+			if (!placementNew)
+			{
+				new(temp) ObjectType();
+			}
 			if (temp == nullptr) CRASH();
 			temp->next = pFreeNode;
 			temp->underFlowGuard = this;
