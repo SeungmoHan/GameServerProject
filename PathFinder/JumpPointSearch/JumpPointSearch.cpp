@@ -8,8 +8,55 @@
 int g_OperationCounting = 0;
 
 int g_OpenListSize = 0;
+int i = 0;
+JumpPointSearch::PathNode* JumpPointSearch::GetShortestPath(JumpPointSearch::PathNode* nodeList, TileMap& tileMap)
+{
+	if (nodeList == nullptr) return nullptr;
 
+	JumpPointSearch::PathNode* shortestPath = new JumpPointSearch::PathNode(*nodeList);
+	shortestPath->parent = nullptr;
+	JumpPointSearch::PathNode* tempNode = shortestPath;
+	JumpPointSearch::PathNode* nextNode = nodeList->parent;
+	JumpPointSearch::PathNode* lastHaveNode = nodeList->parent;
 
+	while (nextNode != nullptr)
+	{
+		bool isConnected = true;
+		DrawLine::Node* line = drawLiner.GetStraightLine(tempNode->x, nextNode->x, tempNode->y, nextNode->y);
+		while (line != nullptr)
+		{
+			if (tileMap.IsBlocked(line->x, line->y))
+			{
+				isConnected = false;
+				break;
+			}
+			line = line->next;
+		}
+		if (isConnected)
+		{
+			lastHaveNode = nextNode;
+			if (nextNode->parent == nullptr)
+			{
+				JumpPointSearch::PathNode* newNode = new JumpPointSearch::PathNode();
+				newNode->x = nextNode->x;
+				newNode->y = nextNode->y;
+				newNode->parent = nullptr;
+				tempNode->parent = newNode;
+				tempNode = newNode;
+				break;
+			}
+			nextNode = nextNode->parent;
+			continue;
+		}
+		JumpPointSearch::PathNode* newNode = new JumpPointSearch::PathNode();
+		newNode->x = lastHaveNode->x;
+		newNode->y = lastHaveNode->y;
+		newNode->parent = nullptr;
+		tempNode->parent = newNode;
+		tempNode = newNode;
+	}
+	return shortestPath;
+}
 JumpPointSearch::PathNode* JumpPointSearch::FindPath(TileMap& OUT tileMap, int IN beginXPoint, int IN endXPoint, int IN beginYPoint, int IN endYPoint)
 {
 	ProFiler FindPath("JumpPointSearch::FindPath()");
@@ -198,7 +245,23 @@ void JumpPointSearch::JumpLeft(TileMap& OUT tileMap, PathNode* currentNode, int 
 
 		if (tempNode.x == endXPoint && tempNode.y == endYPoint)
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
 			tileMap.SetOpenList(newNode->x, newNode->y, true);
@@ -208,7 +271,23 @@ void JumpPointSearch::JumpLeft(TileMap& OUT tileMap, PathNode* currentNode, int 
 		if ((tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y + 1)) ||
 			(tileMap.IsBlocked(tempNode.x, tempNode.y - 1) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y - 1)))
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -235,7 +314,23 @@ void JumpPointSearch::JumpRight(TileMap& OUT tileMap, PathNode* currentNode, int
 		tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
 		if (tempNode.x == endXPoint && tempNode.y == endYPoint)
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -245,7 +340,23 @@ void JumpPointSearch::JumpRight(TileMap& OUT tileMap, PathNode* currentNode, int
 		if ((tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y + 1)) ||
 			(tileMap.IsBlocked(tempNode.x, tempNode.y - 1) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y - 1)))
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -273,7 +384,23 @@ void JumpPointSearch::JumpUp(TileMap& OUT tileMap, PathNode* currentNode,int end
 		tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
 		if (tempNode.x == endXPoint && tempNode.y == endYPoint)
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -283,7 +410,23 @@ void JumpPointSearch::JumpUp(TileMap& OUT tileMap, PathNode* currentNode,int end
 		if ((tileMap.IsBlocked(tempNode.x+1, tempNode.y ) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y - 1)) ||
 			(tileMap.IsBlocked(tempNode.x - 1, tempNode.y ) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y - 1)))
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -310,7 +453,23 @@ void JumpPointSearch::JumpDown(TileMap& OUT tileMap, PathNode* currentNode, int 
 		tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
 		if (tempNode.x == endXPoint && tempNode.y == endYPoint)
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -320,7 +479,23 @@ void JumpPointSearch::JumpDown(TileMap& OUT tileMap, PathNode* currentNode, int 
 		if ((tileMap.IsBlocked(tempNode.x + 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y + 1)) ||
 			(tileMap.IsBlocked(tempNode.x - 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y + 1)))
 		{
-			if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) break;
+			if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+			{
+				for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+				{
+					if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+					{
+						if ((*iter)->GValue > tempNode.GValue)
+						{
+							(*iter)->parent = tempNode.parent;
+							(*iter)->GValue = tempNode.GValue;
+							(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+							break;
+						}
+					}
+				}
+				break;
+			}
 			if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))break;
 			PathNode* newNode = new PathNode(tempNode);
 			openList.push_back(newNode);
@@ -362,7 +537,23 @@ void JumpPointSearch::JumpLeftUp(TileMap& OUT tileMap, PathNode* currentNode, in
 	}
 	if (flag)
 	{
-		if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) return;
+		if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+		{
+			for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+			{
+				if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+				{
+					if ((*iter)->GValue > tempNode.GValue)
+					{
+						(*iter)->parent = tempNode.parent;
+						(*iter)->GValue = tempNode.GValue;
+						(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+						break;
+					}
+				}
+			}
+			return;
+		}
 		if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))return;
 		PathNode* newNode = new PathNode(tempNode);
 		tileMap.SetOpenList(newNode->x, newNode->y,true);
@@ -403,7 +594,23 @@ void JumpPointSearch::JumpLeftDown(TileMap& OUT tileMap, PathNode* currentNode, 
 	}
 	if (flag)
 	{
-		if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) return;
+		if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+		{
+			for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+			{
+				if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+				{
+					if ((*iter)->GValue > tempNode.GValue)
+					{
+						(*iter)->parent = tempNode.parent;
+						(*iter)->GValue = tempNode.GValue;
+						(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+						break;
+					}
+				}
+			}
+			return;
+		}
 		if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))return;
 		PathNode* newNode = new PathNode(tempNode);
 		tileMap.SetOpenList(newNode->x, newNode->y, true);
@@ -444,7 +651,23 @@ void JumpPointSearch::JumpRightUp(TileMap& OUT tileMap, PathNode* currentNode, i
 	}
 	if (flag)
 	{
-		if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) return;
+		if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+		{
+			for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+			{
+				if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+				{
+					if ((*iter)->GValue > tempNode.GValue)
+					{
+						(*iter)->parent = tempNode.parent;
+						(*iter)->GValue = tempNode.GValue;
+						(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+						break;
+					}
+				}
+			}
+			return;
+		}
 		if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))return;
 		PathNode* newNode = new PathNode(tempNode);
 		openList.push_back(newNode);
@@ -485,7 +708,23 @@ void JumpPointSearch::JumpRightDown(TileMap& OUT tileMap, PathNode* currentNode,
 	}
 	if (flag)
 	{
-		if (tileMap.IsInOpenList(tempNode.x, tempNode.y)) return;
+		if (tileMap.IsInOpenList(tempNode.x, tempNode.y))
+		{
+			for (auto iter = openList.begin(); iter != openList.end(); ++iter)
+			{
+				if (tempNode.x == (*iter)->x && tempNode.y == (*iter)->y)
+				{
+					if ((*iter)->GValue > tempNode.GValue)
+					{
+						(*iter)->parent = tempNode.parent;
+						(*iter)->GValue = tempNode.GValue;
+						(*iter)->FValue = (*iter)->GValue + (*iter)->HValue;
+						break;
+					}
+				}
+			}
+			return;
+		}
 		if (tileMap.hasBeenBefore(tempNode.x, tempNode.y))return;
 		PathNode* newNode = new PathNode(tempNode);
 		openList.push_back(newNode);

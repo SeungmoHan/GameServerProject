@@ -1,10 +1,10 @@
 ﻿// PathFinder.cpp : 애플리케이션에 대한 진입점을 정의합니다.
 //
-//#ifdef UNICODE
-//#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console")
-//#else
-//#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console")
-//#endif
+#ifdef UNICODE
+#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console")
+#else
+#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console")
+#endif
 #include <windowsx.h>
 #include "framework.h"
 #include "JumpPointSearchPathFinder.h"
@@ -13,6 +13,7 @@
 #include <iostream>
 #include <algorithm>
 #include "profiler.h"
+#include "DrawStraightLine.h"
 #define MAX_LOADSTRING 100
 
 // 전역 변수:
@@ -37,8 +38,11 @@ INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
 JumpPointSearch g_PathFinder;
 JumpPointSearch::PathNode* g_PathNode;
+PathNode* g_LastRet;
+PathNode* g_ShortstPath;
 
-
+DrawLine g_DrawLiner;
+DrawLine::Node* g_LineNode;
 
 //자 이제 클래스화 된걸 전역에 흩뿌릴겁니다...
 //이렇게 해야지 한 루프에 한큐씩 돌릴수있거든요...
@@ -46,9 +50,12 @@ JumpPointSearch::PathNode* g_PathNode;
 HDC primaryHDC;
 HDC secondaryHDC;
 
+HPEN g_OrangeThickPen;
 HPEN g_WhitePen;
 HPEN g_BlackPen;
 HPEN g_YellowPen;
+HPEN g_RedPen;
+HPEN g_PurplePen;
 
 bool changeTileFlag;
 bool isTileBlack;
@@ -61,11 +68,18 @@ HBRUSH g_RedBrush;
 HBRUSH g_GreenBrush;
 
 
+
 int g_MouseXPos;
 int g_MouseYPos;
 
 int g_BeginXPoint;
 int g_BeginYPoint;
+
+int g_LineBeginXPoint;
+int g_LineEndXPoint;
+
+int g_LineBeginYPoint;
+int g_LineEndYPoint;
 
 int g_EndXPoint;
 int g_EndYPoint;
@@ -74,24 +88,30 @@ bool g_OneQueueFlag;
 clock_t beginTime;
 clock_t endTime;
 
-PathNode* lastRet;
-void ClearPath(JumpPointSearch::PathNode*& pathNode);
 void PrintTile(TileMap& tile, HDC hdc);
 void PrintTile(TileMap& tile, HDC hdc);
-void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc);
+void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath);
+void DrawStraightLine(DrawLine::Node* node,HDC hdc);
 
 
-void ClearPath(JumpPointSearch::PathNode*& pathNode)
+
+
+void DrawStraightLine(DrawLine::Node* node,HDC hdc)
 {
-    JumpPointSearch::PathNode* temp = pathNode;
-    while (pathNode != nullptr)
+    if (node == nullptr) return;
+    SelectObject(hdc, g_OrangeThickPen);
+    MoveToEx(hdc, node->x * g_InchPerTile + (g_InchPerTile /2), node->y * g_InchPerTile + (g_InchPerTile / 2), nullptr);
+    DrawLine::Node* end = node;
+    while (node != nullptr)
     {
-        pathNode = pathNode->parent;
-        delete temp;
-        temp = pathNode;
+        Rectangle(hdc, node->x * g_InchPerTile, node->y * g_InchPerTile, node->x * g_InchPerTile + g_InchPerTile, node->y * g_InchPerTile + g_InchPerTile);
+        if (node->next == nullptr)
+            end = node;
+        node = node->next;
     }
-    pathNode = nullptr;
+    LineTo(hdc, end->x * g_InchPerTile + (g_InchPerTile / 2), end->y * g_InchPerTile + (g_InchPerTile / 2));
 }
+
 void PrintTile(TileMap& tile, HDC hdc)
 {
     //system("cls");
@@ -153,10 +173,13 @@ void PrintTile(TileMap& tile, HDC hdc)
 
 }
 
-void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc)
+void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath)
 {
     if (nodeList == nullptr)return;
-    SelectObject(hdc, g_YellowPen);
+    if (!shortestPath)
+        SelectObject(hdc, g_YellowPen);
+    else
+        SelectObject(hdc, g_PurplePen);
 
     JumpPointSearch::PathNode* temp = nodeList;
     int i = 0;
@@ -164,33 +187,24 @@ void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc)
     while (temp != nullptr)
     {
         LineTo(hdc, temp->x * g_InchPerTile + g_InchPerTile / 2, temp->y * g_InchPerTile + g_InchPerTile / 2);
-        WCHAR buffer[10]{ 0 };
-        _itow_s(i++, buffer, 10);
-        TextOut(hdc, temp->x * g_InchPerTile + g_InchPerTile / 2, temp->y * g_InchPerTile + g_InchPerTile / 2, buffer, wcslen(buffer));
+        if (!shortestPath)
+        {
+            WCHAR buffer[10]{ 0 };
+            _itow_s(i++, buffer, 10);
+            TextOut(hdc, temp->x * g_InchPerTile + g_InchPerTile / 2, temp->y * g_InchPerTile + g_InchPerTile / 2, buffer, wcslen(buffer));
+        }
+        else
+        {
+            Ellipse(hdc, (temp->x * g_InchPerTile) + (g_InchPerTile / 2) - 5,
+                (temp->y * g_InchPerTile) + (g_InchPerTile / 2-5),
+                (temp->x * g_InchPerTile) + (g_InchPerTile / 2+5),
+                (temp->y * g_InchPerTile) + (g_InchPerTile / 2+5));
+        }
         temp = temp->parent;
     }
     return;
 
 }
-
-void DrawPath(std::list<JumpPointSearch::PathNode>& nodeList)
-{
-    if (nodeList.size() == 0) return;
-    HDC hdc = GetDC(g_hWnd);
-    SelectObject(hdc, g_YellowPen);
-
-    //printf("Draw Path : \n");
-    auto nodeIter = nodeList.begin();
-    MoveToEx(hdc, nodeIter->x * g_InchPerTile + g_InchPerTile / 2, nodeIter->y * g_InchPerTile + g_InchPerTile / 2, nullptr);
-    for (; nodeIter != nodeList.end(); ++nodeIter)
-    {
-        LineTo(hdc, nodeIter->x * g_InchPerTile + g_InchPerTile / 2, nodeIter->y * g_InchPerTile + g_InchPerTile / 2);
-        //printf("node : %d, %d\n", nodeIter->x, nodeIter->y);
-    }
-    ReleaseDC(g_hWnd, hdc);
-    //g_PathFinder.RemoveFoundPath(node);
-}
-
 
 
 
@@ -216,6 +230,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     g_WhitePen = CreatePen(PS_SOLID, 0, RGB(255, 255, 255));
     g_BlackPen = CreatePen(PS_SOLID, 0, RGB(50, 50, 50));
     g_YellowPen = CreatePen(PS_SOLID, 5, RGB(255, 255, 0));
+    g_RedPen = CreatePen(PS_SOLID, 5, RGB(255, 0, 0));
+    g_OrangeThickPen = CreatePen(PS_SOLID, 3, RGB(255, 200, 0));
+    g_PurplePen = CreatePen(PS_SOLID, 3, RGB(255, 0, 255));
 
     g_BlackBrush = CreateSolidBrush(RGB(0, 0, 0));
     g_WhiteBrush = CreateSolidBrush(RGB(255, 255, 255));
@@ -223,8 +240,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     g_GreenBrush = CreateSolidBrush(RGB(0, 128, 0));
     g_RedBrush = CreateSolidBrush(RGB(255, 0, 0));
     g_BlueBrush = CreateSolidBrush(RGB(0, 0, 127));
-
-
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_JUMPPOINTSEARCHPATHFINDER));
 
     MSG msg;
@@ -239,21 +254,30 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         }
         else
         {
-            bool success;
-            if (lastRet == nullptr)
+            if(g_DrawLiner.IsStartFlagOn())
             {
-                success = g_PathFinder.GetNextPoint(g_TileMap, lastRet, g_BeginXPoint, g_EndXPoint, g_BeginYPoint, g_EndYPoint);
+                g_LineNode = g_DrawLiner.DrawStraightLine(g_LineBeginXPoint, g_LineEndXPoint, g_LineBeginYPoint, g_LineEndYPoint);
+                if (g_LineNode != nullptr)
+                {
+                    InvalidateRect(g_hWnd, nullptr, true);
+                }
+            }
+            bool success;
+            if (g_LastRet == nullptr)
+            {
+                success = g_PathFinder.GetNextPoint(g_TileMap, g_LastRet, g_BeginXPoint, g_EndXPoint, g_BeginYPoint, g_EndYPoint);
             }
             else
             {
-                success = g_PathFinder.GetNextPoint(g_TileMap, lastRet, lastRet->x, g_EndXPoint, lastRet->y, g_EndYPoint);
+                success = g_PathFinder.GetNextPoint(g_TileMap, g_LastRet, g_LastRet->x, g_EndXPoint, g_LastRet->y, g_EndYPoint);
                 Sleep(200);
                 InvalidateRect(g_hWnd, nullptr, true);
             }
             if (success)
             {
-                g_PathNode = lastRet;
-                lastRet = nullptr;
+                g_PathNode = g_LastRet;
+                g_ShortstPath = g_PathFinder.GetShortestPath(g_PathNode, g_TileMap);
+                g_LastRet = nullptr;
                 success = false;
                 InvalidateRect(g_hWnd, nullptr, true);
             }
@@ -329,6 +353,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 //  WM_DESTROY  - 종료 메시지를 게시하고 반환합니다.
 //
 //
+
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -354,11 +380,63 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         g_MouseXPos = GET_X_LPARAM(lParam);
         g_MouseYPos = GET_Y_LPARAM(lParam);
+        bool flag = false;
+        if (!g_DrawLiner.IsStartFlagOn())
+        {
+            g_LineBeginXPoint = g_MouseXPos / g_InchPerTile;
+            g_LineBeginYPoint = g_MouseYPos / g_InchPerTile;
+            g_LineEndXPoint = g_MouseXPos / g_InchPerTile;
+            g_LineEndYPoint = g_MouseYPos / g_InchPerTile;
+        }
+        else
+        {
+            g_LineEndXPoint = g_MouseXPos / g_InchPerTile;
+            g_LineEndYPoint = g_MouseYPos / g_InchPerTile;
+        }
+
+        if (g_LineBeginXPoint >= TILE_MAP_WIDTH)
+            g_LineBeginXPoint = TILE_MAP_WIDTH - 1;
+        if (g_LineBeginXPoint < 0)
+            g_LineBeginXPoint = 0;
+
+        if (g_LineEndXPoint >= TILE_MAP_WIDTH)
+            g_LineEndXPoint = TILE_MAP_WIDTH - 1;
+        if (g_LineEndXPoint < 0)
+            g_LineEndXPoint = 0;
+
+        if (g_LineBeginYPoint >= TILE_MAP_HEIGHT)
+            g_LineBeginYPoint = TILE_MAP_HEIGHT - 1;
+        if (g_LineBeginYPoint < 0)
+            g_LineBeginYPoint = 0;
+
+        if (g_LineEndYPoint >= TILE_MAP_HEIGHT)
+            g_LineEndYPoint = TILE_MAP_HEIGHT - 1;
+        if (g_LineEndYPoint < 0)
+            g_LineEndYPoint = 0;
+
         if (changeTileFlag)
         {
             if (g_TileMap.BlockTile(g_MouseXPos / g_InchPerTile, g_MouseYPos / g_InchPerTile, !isTileBlack))
                 InvalidateRect(g_hWnd, nullptr, true);
         }
+        WCHAR str[100]{ 0 };
+        WCHAR tempStr[10]{ 0 };
+        wcscat_s(str, L"Begin X : ");
+        _itow_s(g_LineBeginXPoint, tempStr, 10);
+        wcscat_s(str, tempStr);
+        wcscat_s(str, L"\n\nEnd X : ");
+        _itow_s(g_LineEndXPoint, tempStr, 10);
+        wcscat_s(str, tempStr);
+        wcscat_s(str, L"\n\nBegin Y : ");
+        _itow_s(g_LineBeginYPoint, tempStr, 10);
+        wcscat_s(str, tempStr);
+        wcscat_s(str, L"\n\nEnd Y : ");
+        _itow_s(g_LineEndYPoint, tempStr, 10);
+        wcscat_s(str, tempStr);
+        wcscat_s(str, L"             ");
+        HDC hdc = GetDC(g_hWnd);
+        TextOut(hdc, 60 * g_InchPerTile + 10, 800, str, wcslen(str));
+        ReleaseDC(g_hWnd, hdc);
         break;
     }
     case WM_LBUTTONDOWN:
@@ -400,23 +478,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             if (g_PathFinder.StartPathFinding())
             {
-                ClearPath(g_PathNode);
-                ClearPath(lastRet);
+                g_PathFinder.ClearPath(g_PathNode);
+                g_PathFinder.ClearPath(g_LastRet);
+                g_PathFinder.ClearPath(g_ShortstPath);
                 g_TileMap.ResetCloseList();
                 g_TileMap.ResetOpenList();
                 g_TileMap.ResetBlockColor();
             }
             break;
         }
+
         case VK_F3:
         {
             if (!g_PathFinder.IsFindingPath())
             {
-                ClearPath(g_PathNode);
-                ClearPath(lastRet);
+                g_PathFinder.ClearPath(g_PathNode);
+                g_PathFinder.ClearPath(g_LastRet);
+                g_PathFinder.ClearPath(g_ShortstPath);
                 g_OneQueueFlag = true;
                 beginTime = clock();
                 g_PathNode = g_PathFinder.FindPath(g_TileMap, g_BeginXPoint, g_EndXPoint, g_BeginYPoint, g_EndYPoint);
+                g_ShortstPath = g_PathFinder.GetShortestPath(g_PathNode, g_TileMap);
                 endTime = clock();
                 InvalidateRect(g_hWnd, nullptr, true);
             }
@@ -426,9 +508,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             if (!g_PathFinder.IsFindingPath())
             {
-                //g_Path.clear();
-                ClearPath(g_PathNode);
-                ClearPath(lastRet);
+                g_PathFinder.ClearPath(g_PathNode);
+                g_PathFinder.ClearPath(g_LastRet);
+                g_PathFinder.ClearPath(g_ShortstPath);
                 g_TileMap.ResetCloseList();
                 g_TileMap.ResetOpenList();
                 g_TileMap.ResetBlockColor();
@@ -444,8 +526,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 g_TileMap.ResetCloseList();
                 g_TileMap.ResetOpenList();
                 g_TileMap.ResetBlockColor();
-                ClearPath(g_PathNode);
-                ClearPath(lastRet);
+                g_PathFinder.ClearPath(g_PathNode);
+                g_PathFinder.ClearPath(g_LastRet);
+                g_PathFinder.ClearPath(g_ShortstPath);
                 InvalidateRect(g_hWnd, nullptr, true);
             }
             break;
@@ -453,6 +536,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case VK_F6:
         {
             SaveProfiling();
+            break;
+        }
+        case VK_F11:
+        {
+            g_DrawLiner.RemoveLine(g_LineNode);
+            g_DrawLiner.StartDrawLine();
+            break;
+        }
+        case VK_F12:
+        {
+            g_DrawLiner.EndDrawLine();
             break;
         }
         }
@@ -500,11 +594,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         TextOut(MemDC, 400, 40 * g_InchPerTile, L"경로에 숫자가 처음엔 거꾸로 나오다가 나중에 뒤집어집니다. 이상한거 아닙니다. 일부로 보기좋으라고 한번더 뒤집는겁니다.", 66);
         TextOut(MemDC, 500, 40 * g_InchPerTile + 20, L"PS 스파게티입니다(맛없습니다) 더블버퍼링 안했습니다 눈도 아픕니다", 37);
+
+
         PrintTile(g_TileMap, MemDC);
-        DrawPath(lastRet, MemDC);
-        DrawPath(g_PathNode, MemDC);
-        DrawPath(lastRet, MemDC);
-        DrawPath(g_PathNode, MemDC);
+        DrawPath(g_LastRet, MemDC,false);
+        DrawPath(g_PathNode, MemDC, false);
+        DrawPath(g_LastRet, MemDC, false);
+        DrawPath(g_PathNode, MemDC, false);
+        DrawPath(g_ShortstPath, MemDC, true);
+        if (g_DrawLiner.IsStartFlagOn())
+        {
+            DrawStraightLine(g_LineNode, MemDC);
+        }
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, MemDC, 0, 0, SRCCOPY);
         DeleteDC(MemDC);
         Sleep(5);
