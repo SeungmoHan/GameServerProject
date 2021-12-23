@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __EFFECT_OBJECT_HEADER__
 #define __EFFECT_OBJECT_HEADER__
+#define __UNIV_DEVELOPER_
 #include "BaseObject.h"
 
 namespace univ_dev

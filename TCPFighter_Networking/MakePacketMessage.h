@@ -1,7 +1,7 @@
 #pragma once 
 #ifndef __CREATE_PACKET_MESSAGE_HEADER__
 #define __CREATE_PACKET_MESSAGE_HEADER__
-
+#define __UNIV_DEVELOPER_
 #include "SerializingPacket.h"
 #include "PacketDefine.h"
 namespace univ_dev

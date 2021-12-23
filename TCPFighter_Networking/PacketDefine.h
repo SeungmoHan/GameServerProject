@@ -16,7 +16,8 @@
 
 #ifndef __PACKET_DEFINE__
 #define __PACKET_DEFINE__
-
+#define __PROCADEMY_PACKET_DEFINE_
+///__procademy_packet_define_
 using BYTE = unsigned char;
 #define UM_NETWORK (WM_USER +1)
 

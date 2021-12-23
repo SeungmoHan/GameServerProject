@@ -1,6 +1,8 @@
 #include "PlayerObject.h"
 #include "EffectObject.h"
 
+///__univ_developer_player_object_
+
 namespace univ_dev
 {
 	//#define RANGE_MOVE_TOP	50
