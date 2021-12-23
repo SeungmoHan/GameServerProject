@@ -1,5 +1,7 @@
 #include "EffectObject.h"
 
+///__univ_developer_effect_object_
+
 namespace univ_dev
 {
 		void EffectObject::Render(BYTE* pDest, int destWidth, int destHeight, int destPitch)

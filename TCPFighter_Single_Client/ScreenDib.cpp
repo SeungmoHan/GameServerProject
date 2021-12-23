@@ -1,5 +1,7 @@
 #include "ScreenDib.h"
 
+///__univ_developer_screen_dib_
+
 namespace univ_dev
 {
 	ScreenDib g_ScreenDibBuffer(640, 480, 32);

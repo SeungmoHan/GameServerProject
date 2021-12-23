@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __BASE_OBJECT_HEADER__
 #define __BASE_OBJECT_HEADER__
+#define __UNIV_DEVELOPER_
 #include "ScreenDib.h"
 #include "SpriteDib.h"
 #include <vector>

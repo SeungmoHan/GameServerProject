@@ -1,5 +1,7 @@
 #include "BaseObject.h"
 
+///__univ_developer_base_object_
+
 namespace univ_dev
 {
 		int BaseObject::objectIDCounts = 0;

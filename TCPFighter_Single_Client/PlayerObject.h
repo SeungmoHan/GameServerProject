@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __PLAYER_OBJECT_HEADER__
 #define __PLAYER_OBJECT_HEADER__
+#define __UNIV_DEVELOPER_
 #include "BaseObject.h"
 #include <list>
 namespace univ_dev

@@ -1,6 +1,8 @@
 #include <Windows.h>
 #include "SpriteDib.h"
 
+///__univ_developer_sprite_dib_
+
 namespace univ_dev
 {
 	SpriteDib g_SpriteDibBuffer(100, 0x00ffffff);

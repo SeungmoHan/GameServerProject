@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __SCREEN_DIB_BUFFER_HEADER__
 #define __SCREEN_DIB_BUFFER_HEADER__
+#define __UNIV_DEVEOPER_
 #include "framework.h"
 
 namespace univ_dev

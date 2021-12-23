@@ -1,11 +1,8 @@
 #include "PlayerObject.h"
 #include "EffectObject.h"
 
+///__univ_developer_player_object_
 
-//#define RANGE_MOVE_TOP	50
-//#define RANGE_MOVE_LEFT	10
-//#define RANGE_MOVE_RIGHT	630
-//#define RANGE_MOVE_BOTTOM	470
 namespace univ_dev
 {
 	void PlayerObject::ActionProc()

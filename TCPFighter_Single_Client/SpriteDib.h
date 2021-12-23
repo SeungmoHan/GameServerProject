@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __SPRITE_DIB_HEADER__
 #define __SPRITE_DIB_HEADER__
+#define __UNIV_DEVELOPER_
 #include "framework.h"
 namespace univ_dev
 {
