@@ -1,6 +1,8 @@
 #pragma once
 #ifndef __PROFILER_HEADER__
 #define __PROFILER_HEADER__
+#define __UNIV_DEVELOPER_
+
 #include <Windows.h>
 constexpr int SAMPLE_SIZE = 10;
 
