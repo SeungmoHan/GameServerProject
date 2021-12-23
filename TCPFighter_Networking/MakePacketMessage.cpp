@@ -1,6 +1,9 @@
 #include "MakePacketMessage.h"
 
-/*
+
+namespace univ_dev
+{
+	/*
 	BYTE	byCode;			// 패킷코드 0x89 고정.
 	BYTE	bySize;			// 패킷 사이즈.
 	BYTE	byType;			// 패킷타입.
@@ -60,47 +63,49 @@
 //	packet.y = y;
 //}
 
-void MakePacketStartMove(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
-{
-	BYTE code = 0x89;
-	BYTE payloadSize = 5;
-	BYTE packetType = dfPACKET_CS_MOVE_START;
+	void MakePacketStartMove(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
+	{
+		BYTE code = 0x89;
+		BYTE payloadSize = 5;
+		BYTE packetType = dfPACKET_CS_MOVE_START;
 
-	packet << code << payloadSize << packetType << direction << x << y;
-}
+		packet << code << payloadSize << packetType << direction << x << y;
+	}
 
-void MakePacketStopMove(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
-{
-	BYTE code = 0x89;
-	BYTE payloadSize = 5;
-	BYTE packetType = dfPACKET_CS_MOVE_STOP;
+	void MakePacketStopMove(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
+	{
+		BYTE code = 0x89;
+		BYTE payloadSize = 5;
+		BYTE packetType = dfPACKET_CS_MOVE_STOP;
 
-	packet << code << payloadSize << packetType << direction << x << y;
-}
+		packet << code << payloadSize << packetType << direction << x << y;
+	}
 
-void MakePacketAttack1(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
-{
-	BYTE code = 0x89;
-	BYTE payloadSize = 5;
-	BYTE packetType = dfPACKET_CS_ATTACK1;
+	void MakePacketAttack1(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
+	{
+		BYTE code = 0x89;
+		BYTE payloadSize = 5;
+		BYTE packetType = dfPACKET_CS_ATTACK1;
 
-	packet << code << payloadSize << packetType << direction << x << y;
-}
+		packet << code << payloadSize << packetType << direction << x << y;
+	}
 
-void MakePacketAttack2(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
-{
-	BYTE code = 0x89;
-	BYTE packetType = dfPACKET_CS_ATTACK2;
-	BYTE payloadSize = 5;
+	void MakePacketAttack2(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
+	{
+		BYTE code = 0x89;
+		BYTE packetType = dfPACKET_CS_ATTACK2;
+		BYTE payloadSize = 5;
 
-	packet << code << payloadSize << packetType << direction << x << y;
-}
+		packet << code << payloadSize << packetType << direction << x << y;
+	}
 
-void MakePacketAttack3(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
-{
-	BYTE code = 0x89;
-	BYTE payloadSize = 5;
-	BYTE packetType = dfPACKET_CS_ATTACK3;
+	void MakePacketAttack3(Packet& packet, BYTE direction, unsigned short x, unsigned short y)
+	{
+		BYTE code = 0x89;
+		BYTE payloadSize = 5;
+		BYTE packetType = dfPACKET_CS_ATTACK3;
 
-	packet << code << payloadSize << packetType << direction << x << y;
+		packet << code << payloadSize << packetType << direction << x << y;
+	}
+
 }

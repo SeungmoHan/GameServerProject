@@ -1,28 +1,55 @@
 #pragma once
-#ifndef __PROFILE_INTERFACE_HEADER__
-#define __PROFILE_INTERFACE_HEADER__
-#define PROFILE
-#include "profiler.h"
+#ifndef __PROFILER_HEADER__
+#define __PROFILER_HEADER__
+#include <Windows.h>
 
+#define __UNIV_DEV_PROFILE
+#ifdef __UNIV_DEV_PROFILE
 
-class Profiler
+#define BEGIN_PROFILE(arg) univ_dev::BeginProfiling(arg)
+#define END_PROFILE(arg) univ_dev::EndProfiling(arg)
+
+#else
+#define BEGIN_PROFILE(arg)
+#define END_PROFILE(arg)
+
+#endif 
+
+namespace univ_dev
 {
-public:
-	Profiler(const char* args) : name(args)
+	constexpr int SAMPLE_SIZE = 20;
+
+	struct PROFILE_SAMPLE
 	{
-		BEGIN_PROFILE(args);
-	}
-	void ResetProfile()
-	{
-		ResetProfile();
-	}
-	~Profiler()
-	{
-		END_PROFILE(name);
-	}
-private:
-	const char* name;
-};
+		bool flag;
+		char profileName[64];
+		LARGE_INTEGER startTime;
+		__int64 totalTime;
+		__int64 min[2];
+		__int64 max[2];
+		__int64 callCounts;
+	};
 
 
-#endif // !__PROFILE_INTERFACE_HEADER__
+	void BeginProfiling(const char* name);
+	void EndProfiling(const char* name);
+	void SaveProfiling();
+	void ResetProfiling();
+
+	extern PROFILE_SAMPLE samples[SAMPLE_SIZE];
+	class ProFiler
+	{
+	public:
+		ProFiler(const char* name) :name(name)
+		{
+			BeginProfiling(name);
+		}
+		~ProFiler()
+		{
+			EndProfiling(name);
+		}
+	private:
+		const char* name;
+	};
+}
+#endif // !__PROFILER_HEADER__

@@ -1,27 +1,28 @@
 ﻿// PathFinder.cpp : 애플리케이션에 대한 진입점을 정의합니다.
 //
-#ifdef UNICODE
-#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console")
-#else
-#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console")
-#endif
+//#ifdef UNICODE
+//#pragma comment(linker, "/entry:wWinMainCRTStartup /subsystem:console")
+//#else
+//#pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console")
+//#endif
+
+
+#define __PRINT_WITH_WINAPI
 #include <windowsx.h>
+#include <iostream>
 #include "framework.h"
 #include "JumpPointSearchPathFinder.h"
 #include "TileMap.h"
 #include "JumpPointSearch.h"
-#include <iostream>
-#include <algorithm>
 #include "profiler.h"
 #include "DrawStraightLine.h"
 #define MAX_LOADSTRING 100
-
 // 전역 변수:
 HINSTANCE hInst;                                // 현재 인스턴스입니다.
 WCHAR szTitle[MAX_LOADSTRING];                  // 제목 표시줄 텍스트입니다.
 WCHAR szWindowClass[MAX_LOADSTRING];            // 기본 창 클래스 이름입니다.
 
-using PathNode = JumpPointSearch::PathNode;
+using PathNode = univ_dev::JumpPointSearch::PathNode;
 
 
 constexpr int g_InchPerTile = 24;
@@ -29,20 +30,20 @@ constexpr int g_InchPerTile = 24;
 
 
 HWND g_hWnd;
-TileMap g_TileMap;
+univ_dev::TileMap g_TileMap;
 // 이 코드 모듈에 포함된 함수의 선언을 전달합니다:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
-JumpPointSearch g_PathFinder;
-JumpPointSearch::PathNode* g_PathNode;
+univ_dev::JumpPointSearch g_PathFinder;
+univ_dev::JumpPointSearch::PathNode* g_PathNode;
 PathNode* g_LastRet;
 PathNode* g_ShortstPath;
 
-DrawLine g_DrawLiner;
-DrawLine::Node* g_LineNode;
+univ_dev::DrawLine g_DrawLiner;
+univ_dev::DrawLine::Node* g_LineNode;
 
 //자 이제 클래스화 된걸 전역에 흩뿌릴겁니다...
 //이렇게 해야지 한 루프에 한큐씩 돌릴수있거든요...
@@ -88,20 +89,20 @@ bool g_OneQueueFlag;
 clock_t beginTime;
 clock_t endTime;
 
-void PrintTile(TileMap& tile, HDC hdc);
-void PrintTile(TileMap& tile, HDC hdc);
-void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath);
-void DrawStraightLine(DrawLine::Node* node,HDC hdc);
+#ifdef __PRINT_WITH_WINAPI
+void univ_dev::PrintTile(TileMap& tile, HDC hdc);
+void univ_dev::PrintTile(TileMap& tile, HDC hdc);
+void DrawPath(univ_dev::JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath);
+void DrawStraightLine(univ_dev::DrawLine::Node* node,HDC hdc);
+#endif
 
 
-
-
-void DrawStraightLine(DrawLine::Node* node,HDC hdc)
+void DrawStraightLine(univ_dev::DrawLine::Node* node,HDC hdc)
 {
     if (node == nullptr) return;
     SelectObject(hdc, g_OrangeThickPen);
     MoveToEx(hdc, node->x * g_InchPerTile + (g_InchPerTile /2), node->y * g_InchPerTile + (g_InchPerTile / 2), nullptr);
-    DrawLine::Node* end = node;
+    univ_dev::DrawLine::Node* end = node;
     while (node != nullptr)
     {
         Rectangle(hdc, node->x * g_InchPerTile, node->y * g_InchPerTile, node->x * g_InchPerTile + g_InchPerTile, node->y * g_InchPerTile + g_InchPerTile);
@@ -112,7 +113,7 @@ void DrawStraightLine(DrawLine::Node* node,HDC hdc)
     LineTo(hdc, end->x * g_InchPerTile + (g_InchPerTile / 2), end->y * g_InchPerTile + (g_InchPerTile / 2));
 }
 
-void PrintTile(TileMap& tile, HDC hdc)
+void univ_dev::PrintTile(TileMap& tile, HDC hdc)
 {
     //system("cls");
     for (int i = 0; i < TileMap::TileMapSize::Height; i++)
@@ -173,7 +174,7 @@ void PrintTile(TileMap& tile, HDC hdc)
 
 }
 
-void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath)
+void DrawPath(univ_dev::JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath)
 {
     if (nodeList == nullptr)return;
     if (!shortestPath)
@@ -181,7 +182,7 @@ void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath)
     else
         SelectObject(hdc, g_PurplePen);
 
-    JumpPointSearch::PathNode* temp = nodeList;
+    univ_dev::JumpPointSearch::PathNode* temp = nodeList;
     int i = 0;
     MoveToEx(hdc, temp->x * g_InchPerTile + g_InchPerTile / 2, temp->y * g_InchPerTile + g_InchPerTile / 2, nullptr);
     while (temp != nullptr)
@@ -202,8 +203,6 @@ void DrawPath(JumpPointSearch::PathNode* nodeList, HDC hdc,bool shortestPath)
         }
         temp = temp->parent;
     }
-    return;
-
 }
 
 
@@ -535,7 +534,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         case VK_F6:
         {
-            SaveProfiling();
+            univ_dev::SaveProfiling();
             break;
         }
         case VK_F11:
@@ -574,7 +573,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         TextOut(MemDC, 60 * g_InchPerTile + 40, 500, L"7. 키보드 F5 Path + 벽 초기화", 22);
         WCHAR buffer[50]{ 0 };
         WCHAR temp[10]{ 0 };
-        _itow_s(g_OpenListSize, temp, 10);
+        _itow_s(univ_dev::g_OpenListSize, temp, 10);
         wcscat_s(buffer, L"오픈리스트 사이즈 : ");
         wcscat_s(buffer, temp);
         TextOut(MemDC, 60 * g_InchPerTile + 40, 700, buffer, wcslen(buffer));
@@ -587,8 +586,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             wcscat_s(buffer, L"걸린 시간 : ");
             wcscat_s(buffer, temp);
             wcscat_s(buffer, L"ms,   연산횟수 : ");
-            _itow_s(g_OperationCounting, temp, 10);
-            g_OperationCounting = 0;
+            _itow_s(univ_dev::g_OperationCounting, temp, 10);
+            univ_dev::g_OperationCounting = 0;
             wcscat_s(buffer, temp);
             TextOut(MemDC, 60 * g_InchPerTile + 40, 600, buffer, wcslen(buffer));
         }

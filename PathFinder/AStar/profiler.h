@@ -2,7 +2,7 @@
 #ifndef __PROFILER_HEADER__
 #define __PROFILER_HEADER__
 #include <Windows.h>
-constexpr int SAMPLE_SIZE = 20;
+constexpr int SAMPLE_SIZE = 64;
 
 #define PROFILE
 #ifdef PROFILE

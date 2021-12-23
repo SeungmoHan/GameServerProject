@@ -66,14 +66,13 @@ SOCKET g_ClientSocket;
 /// 초당 총 루프 반복횟수 프레임수 저장할 공간. v
 /// 초당 총 로직 반복횟수 프레임수 저장할 공간. v
 /// 1초 측정 타이머 v
-std::vector<BaseObject*> g_ObjectList;
-PlayerObject* gp_Player;
+univ_dev::PlayerObject* gp_Player;
 DWORD g_AllFramePerSec;
 DWORD g_LogicFramePerSec;
 static bool g_isActive;
 bool bSendFlag;
-RingBuffer g_RecvRingBuffer;
-RingBuffer g_SendRingBuffer;
+univ_dev::RingBuffer g_RecvRingBuffer;
+univ_dev::RingBuffer g_SendRingBuffer;
 
 
 /// </전역 변수>
@@ -91,27 +90,31 @@ bool ReadEvent();
 bool WriteEvent();
 bool NetWorkProc(DWORD lParam, DWORD wParam);
 void PacketProc(BYTE packetType, char* packet);
-void PacketProc(BYTE packetType, Packet& packet);
+void PacketProc(BYTE packetType, univ_dev::Packet& packet);
 
-void PacketProcCreateMyPlayer(Packet& rawPacket);
-void PacketProcCreateOtherPlayer(Packet& rawPacket);
-void PacketProcDeletePlayer(Packet& rawPacket);
-void PacketProcMoveStart(Packet& rawPacket);
-void PacketProcMoveStop(Packet& rawPacket);
-void PacketProcAttack1(Packet& rawPacket);
-void PacketProcAttack2(Packet& rawPacket);
-void PacketProcAttack3(Packet& rawPacket);
-void PacketProcDamage(Packet& rawPacket);
+namespace univ_dev
+{
+    void PacketProcCreateMyPlayer(univ_dev::Packet& rawPacket);
+    void PacketProcCreateOtherPlayer(univ_dev::Packet& rawPacket);
+    void PacketProcDeletePlayer(univ_dev::Packet& rawPacket);
+    void PacketProcMoveStart(univ_dev::Packet& rawPacket);
+    void PacketProcMoveStop(univ_dev::Packet& rawPacket);
+    void PacketProcAttack1(univ_dev::Packet& rawPacket);
+    void PacketProcAttack2(univ_dev::Packet& rawPacket);
+    void PacketProcAttack3(univ_dev::Packet& rawPacket);
+    void PacketProcDamage(univ_dev::Packet& rawPacket);
 
-void PacketProcCreateMyPlayer(char* packet);
-void PacketProcCreateOtherPlayer(char* packet);
-void PacketProcDeletePlayer(char* packet);
-void PacketProcMoveStart(char* packet);
-void PacketProcMoveStop(char* packet);
-void PacketProcAttack1(char* packet);
-void PacketProcAttack2(char* packet);
-void PacketProcAttack3(char* packet);
-void PacketProcDamage(char* packet);
+    void PacketProcCreateMyPlayer(char* packet);
+    void PacketProcCreateOtherPlayer(char* packet);
+    void PacketProcDeletePlayer(char* packet);
+    void PacketProcMoveStart(char* packet);
+    void PacketProcMoveStop(char* packet);
+    void PacketProcAttack1(char* packet);
+    void PacketProcAttack2(char* packet);
+    void PacketProcAttack3(char* packet);
+    void PacketProcDamage(char* packet);
+}
+
 
 // GameLogic Procedure
 bool InitialGame();
@@ -410,7 +413,7 @@ bool ReadEvent()
         //printf("g_RecvRingBuffer.GetUseSize() : %d\n", g_RecvRingBuffer.GetUseSize());
         //printf("g_RecvRingBuffer.GetFreeSize() : %d\n", g_RecvRingBuffer.GetFreeSize());
         g_RecvRingBuffer.MoveFront(sizeof(PacketHeader));
-        Packet packet;
+        univ_dev::Packet packet;
         int pkRet = g_RecvRingBuffer.Peek(packet.GetBufferPtr(), header.payloadSize);
         if (pkRet != header.payloadSize) break;
         g_RecvRingBuffer.MoveFront(header.payloadSize);
@@ -478,7 +481,7 @@ bool WriteEvent()
 
 
 // Packet Procedure Begin
-void PacketProc(BYTE packetType, Packet& packet)
+void PacketProc(BYTE packetType, univ_dev::Packet& packet)
 {
     //printf("get a message ! %d \n", packetType);
     switch (packetType)
@@ -540,459 +543,446 @@ void PacketProc(BYTE packetType, Packet& packet)
 }
 
 
-
-void PacketProcCreateMyPlayer(char* rawPacket)
+namespace univ_dev
 {
-    SC_PacketCreateMyCharacter* packet = (SC_PacketCreateMyCharacter*)rawPacket;
-    int spriteStart;
-    int spriteEnd;
-    int direction;
-    if (packet->direction == ACTION_MOVE_LL)
+    void PacketProcCreateMyPlayer(char* rawPacket)
     {
-        spriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
-        spriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
-        direction = dfPACKET_MOVE_DIR_LL;
-    }
-    else
-    {
-        spriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
-        spriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
-        direction = dfPACKET_MOVE_DIR_RR;
-    }
-    PlayerObject* myPlayer = new PlayerObject(packet->x, packet->y, e_OBJECT_TYPE::TYPE_PLAYER, true, spriteStart, spriteEnd, packet->playerID, packet->HP);
-    myPlayer->SetDirection(direction);
-    myPlayer->SetAction(12345);
-    myPlayer->SetActionStand();
-    gp_Player = myPlayer;
-    g_ObjectList.push_back(myPlayer);
-}
-void PacketProcCreateMyPlayer(Packet& rawPacket)
-{
-    unsigned int id;
-    BYTE direction;
-    unsigned short x;
-    unsigned short y;
-    BYTE hp;
-
-    rawPacket >> id >> direction >> x >> y >> hp;
-    int inputSpriteStart;
-    int inputSpriteEnd;
-    int inputDirection;
-    if (direction == dfPACKET_MOVE_DIR_LL)
-    {
-        inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
-        inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
-        inputDirection = dfPACKET_MOVE_DIR_LL;
-    }
-    else
-    {
-        inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
-        inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
-        inputDirection = dfPACKET_MOVE_DIR_RR;
-    }
-    PlayerObject* myPlayer = new PlayerObject(x, y, e_OBJECT_TYPE::TYPE_PLAYER, true, inputSpriteStart, inputSpriteEnd, id, hp);
-    myPlayer->SetDirection(inputDirection);
-    myPlayer->SetAction(12345);
-    myPlayer->SetActionStand();
-    gp_Player = myPlayer;
-    g_ObjectList.push_back(myPlayer);
-}
-
-
-void PacketProcCreateOtherPlayer(char* rawPacket)
-{
-    SC_PacketCreateMyCharacter* packet = (SC_PacketCreateMyCharacter*)rawPacket;
-    int spriteStart;
-    int spriteEnd;
-    int direction;
-    if (packet->direction == ACTION_MOVE_LL)
-    {
-        spriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
-        spriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
-        direction = dfPACKET_MOVE_DIR_LL;
-    }
-    else
-    {
-        spriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
-        spriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
-        direction = dfPACKET_MOVE_DIR_RR;
-    }
-    PlayerObject* newPlayer = new PlayerObject(packet->x, packet->y, e_OBJECT_TYPE::TYPE_PLAYER, false, spriteStart, spriteEnd, packet->playerID, packet->HP);
-    newPlayer->SetDirection(direction);
-    newPlayer->SetAction(12345);
-    newPlayer->SetActionStand();
-    g_ObjectList.push_back(newPlayer);
-}
-void PacketProcCreateOtherPlayer(Packet& rawPacket)
-{
-    unsigned int id;
-    BYTE direction;
-    unsigned short x;
-    unsigned short y;
-    BYTE hp;
-
-    rawPacket >> id >> direction >> x >> y >> hp;
-    int inputSpriteStart;
-    int inputSpriteEnd;
-    int inputDirection;
-    if (direction == dfPACKET_MOVE_DIR_LL)
-    {
-        inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
-        inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
-        inputDirection = dfPACKET_MOVE_DIR_LL;
-    }
-    else
-    {
-        inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
-        inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
-        inputDirection = dfPACKET_MOVE_DIR_RR;
-    }
-    PlayerObject* myPlayer = new PlayerObject(x, y, e_OBJECT_TYPE::TYPE_PLAYER, false, inputSpriteStart, inputSpriteEnd, id, hp);
-    myPlayer->SetDirection(inputDirection);
-    myPlayer->SetAction(12345);
-    myPlayer->SetActionStand();
-    g_ObjectList.push_back(myPlayer);
-}
-
-
-void PacketProcDeletePlayer(char* rawPacket)
-{
-    SC_PacketDeleteCharacter* packet = (SC_PacketDeleteCharacter*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end();)
-    {
-        if ((*iter)->GetObjectID() == packet->playerID)
+        SC_PacketCreateMyCharacter* packet = (SC_PacketCreateMyCharacter*)rawPacket;
+        int spriteStart;
+        int spriteEnd;
+        int direction;
+        if (packet->direction == ACTION_MOVE_LL)
         {
-            BaseObject* removePlayer = *iter;
-            iter = g_ObjectList.erase(iter);
-            delete removePlayer;
+            spriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
+            spriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
+            direction = dfPACKET_MOVE_DIR_LL;
         }
         else
         {
-            ++iter;
+            spriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
+            spriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
+            direction = dfPACKET_MOVE_DIR_RR;
         }
+        PlayerObject* myPlayer = new PlayerObject(packet->x, packet->y, e_OBJECT_TYPE::TYPE_PLAYER, true, spriteStart, spriteEnd, packet->playerID, packet->HP);
+        myPlayer->SetDirection(direction);
+        myPlayer->SetAction(12345);
+        myPlayer->SetActionStand();
+        gp_Player = myPlayer;
+        g_ObjectList.push_back(myPlayer);
     }
-}
-void PacketProcDeletePlayer(Packet& rawPacket)
-{
-    unsigned int playerID;
-
-    rawPacket >> playerID;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end();)
+    void PacketProcCreateMyPlayer(Packet& rawPacket)
     {
-        if ((*iter)->GetObjectID() == playerID)
+        unsigned int id;
+        BYTE direction;
+        unsigned short x;
+        unsigned short y;
+        BYTE hp;
+
+        rawPacket >> id >> direction >> x >> y >> hp;
+        int inputSpriteStart;
+        int inputSpriteEnd;
+        int inputDirection;
+        if (direction == dfPACKET_MOVE_DIR_LL)
         {
-            BaseObject* removePlayer = *iter;
-            iter = g_ObjectList.erase(iter);
-            delete removePlayer;
+            inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
+            inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
+            inputDirection = dfPACKET_MOVE_DIR_LL;
         }
         else
         {
-            ++iter;
+            inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
+            inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
+            inputDirection = dfPACKET_MOVE_DIR_RR;
         }
+        PlayerObject* myPlayer = new PlayerObject(x, y, e_OBJECT_TYPE::TYPE_PLAYER, true, inputSpriteStart, inputSpriteEnd, id, hp);
+        myPlayer->SetDirection(inputDirection);
+        myPlayer->SetAction(12345);
+        myPlayer->SetActionStand();
+        gp_Player = myPlayer;
+        g_ObjectList.push_back(myPlayer);
     }
-}
-
-
-void PacketProcMoveStart(char* rawPacket)
-{
-    SC_PacketMoveStart* packet = (SC_PacketMoveStart*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
+    void PacketProcCreateOtherPlayer(char* rawPacket)
     {
-        if ((*iter)->GetObjectID() == packet->playerID)
+        SC_PacketCreateMyCharacter* packet = (SC_PacketCreateMyCharacter*)rawPacket;
+        int spriteStart;
+        int spriteEnd;
+        int direction;
+        if (packet->direction == ACTION_MOVE_LL)
         {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            BYTE direction;
-            if (packet->direction == dfPACKET_MOVE_DIR_DD || packet->direction == dfPACKET_MOVE_DIR_UU)
-                direction = currentPlayer->GetDirection();
-            else if (packet->direction == dfPACKET_MOVE_DIR_LU || packet->direction == dfPACKET_MOVE_DIR_LD)
-                direction = dfPACKET_MOVE_DIR_LL;
-            else if (packet->direction == dfPACKET_MOVE_DIR_RU || packet->direction == dfPACKET_MOVE_DIR_RD)
-                direction = dfPACKET_MOVE_DIR_RR;
+            spriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
+            spriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
+            direction = dfPACKET_MOVE_DIR_LL;
+        }
+        else
+        {
+            spriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
+            spriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
+            direction = dfPACKET_MOVE_DIR_RR;
+        }
+        PlayerObject* newPlayer = new PlayerObject(packet->x, packet->y, e_OBJECT_TYPE::TYPE_PLAYER, false, spriteStart, spriteEnd, packet->playerID, packet->HP);
+        newPlayer->SetDirection(direction);
+        newPlayer->SetAction(12345);
+        newPlayer->SetActionStand();
+        g_ObjectList.push_back(newPlayer);
+    }
+    void PacketProcCreateOtherPlayer(Packet& rawPacket)
+    {
+        unsigned int id;
+        BYTE direction;
+        unsigned short x;
+        unsigned short y;
+        BYTE hp;
+
+        rawPacket >> id >> direction >> x >> y >> hp;
+        int inputSpriteStart;
+        int inputSpriteEnd;
+        int inputDirection;
+        if (direction == dfPACKET_MOVE_DIR_LL)
+        {
+            inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_L01;
+            inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_L_MAX;
+            inputDirection = dfPACKET_MOVE_DIR_LL;
+        }
+        else
+        {
+            inputSpriteStart = (int)e_SPRITE::PLAYER_STAND_R01;
+            inputSpriteEnd = (int)e_SPRITE::PLAYER_STAND_R_MAX;
+            inputDirection = dfPACKET_MOVE_DIR_RR;
+        }
+        PlayerObject* myPlayer = new PlayerObject(x, y, e_OBJECT_TYPE::TYPE_PLAYER, false, inputSpriteStart, inputSpriteEnd, id, hp);
+        myPlayer->SetDirection(inputDirection);
+        myPlayer->SetAction(12345);
+        myPlayer->SetActionStand();
+        g_ObjectList.push_back(myPlayer);
+    }
+    void PacketProcDeletePlayer(char* rawPacket)
+    {
+        SC_PacketDeleteCharacter* packet = (SC_PacketDeleteCharacter*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end();)
+        {
+            if ((*iter)->GetObjectID() == packet->playerID)
+            {
+                BaseObject* removePlayer = *iter;
+                iter = g_ObjectList.erase(iter);
+                delete removePlayer;
+            }
             else
-                direction = packet->direction;
-            currentPlayer->SetPosition(packet->x, packet->y);
-            currentPlayer->SetDirection(direction);
-            currentPlayer->SetAction(packet->direction);
-            currentPlayer->SetActionMove();
-            break;
+            {
+                ++iter;
+            }
         }
     }
-}
-void PacketProcMoveStart(Packet& rawPacket)
-{
-    unsigned int playerID;
-    BYTE moveDirection;
-    unsigned short x;
-    unsigned short y;
-
-    rawPacket >> playerID >> moveDirection >> x >> y;
-
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
+    void PacketProcDeletePlayer(Packet& rawPacket)
     {
-        if ((*iter)->GetObjectID() == playerID)
+        unsigned int playerID;
+
+        rawPacket >> playerID;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end();)
         {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            BYTE direction;
-            if (moveDirection == dfPACKET_MOVE_DIR_DD || moveDirection == dfPACKET_MOVE_DIR_UU)
-                direction = currentPlayer->GetDirection();
-            else if (moveDirection == dfPACKET_MOVE_DIR_LU || moveDirection == dfPACKET_MOVE_DIR_LD)
-                direction = dfPACKET_MOVE_DIR_LL;
-            else if (moveDirection == dfPACKET_MOVE_DIR_RU || moveDirection == dfPACKET_MOVE_DIR_RD)
-                direction = dfPACKET_MOVE_DIR_RR;
+            if ((*iter)->GetObjectID() == playerID)
+            {
+                BaseObject* removePlayer = *iter;
+                iter = g_ObjectList.erase(iter);
+                delete removePlayer;
+            }
             else
-                direction = moveDirection;
-            currentPlayer->SetPosition(x, y);
-            currentPlayer->SetDirection(direction);
-            currentPlayer->SetAction(moveDirection);
-            currentPlayer->SetActionMove();
-            break;
+            {
+                ++iter;
+            }
+        }
+    }
+    void PacketProcMoveStart(char* rawPacket)
+    {
+        SC_PacketMoveStart* packet = (SC_PacketMoveStart*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == packet->playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                BYTE direction;
+                if (packet->direction == dfPACKET_MOVE_DIR_DD || packet->direction == dfPACKET_MOVE_DIR_UU)
+                    direction = currentPlayer->GetDirection();
+                else if (packet->direction == dfPACKET_MOVE_DIR_LU || packet->direction == dfPACKET_MOVE_DIR_LD)
+                    direction = dfPACKET_MOVE_DIR_LL;
+                else if (packet->direction == dfPACKET_MOVE_DIR_RU || packet->direction == dfPACKET_MOVE_DIR_RD)
+                    direction = dfPACKET_MOVE_DIR_RR;
+                else
+                    direction = packet->direction;
+                currentPlayer->SetPosition(packet->x, packet->y);
+                currentPlayer->SetDirection(direction);
+                currentPlayer->SetAction(packet->direction);
+                currentPlayer->SetActionMove();
+                break;
+            }
+        }
+    }
+    void PacketProcMoveStart(Packet& rawPacket)
+    {
+        unsigned int playerID;
+        BYTE moveDirection;
+        unsigned short x;
+        unsigned short y;
+
+        rawPacket >> playerID >> moveDirection >> x >> y;
+
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                BYTE direction;
+                if (moveDirection == dfPACKET_MOVE_DIR_DD || moveDirection == dfPACKET_MOVE_DIR_UU)
+                    direction = currentPlayer->GetDirection();
+                else if (moveDirection == dfPACKET_MOVE_DIR_LU || moveDirection == dfPACKET_MOVE_DIR_LD)
+                    direction = dfPACKET_MOVE_DIR_LL;
+                else if (moveDirection == dfPACKET_MOVE_DIR_RU || moveDirection == dfPACKET_MOVE_DIR_RD)
+                    direction = dfPACKET_MOVE_DIR_RR;
+                else
+                    direction = moveDirection;
+                currentPlayer->SetPosition(x, y);
+                currentPlayer->SetDirection(direction);
+                currentPlayer->SetAction(moveDirection);
+                currentPlayer->SetActionMove();
+                break;
+            }
+        }
+    }
+    void PacketProcMoveStop(char* rawPacket)
+    {
+        SC_PacketMoveStop* packet = (SC_PacketMoveStop*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == packet->playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(packet->x, packet->y);
+                currentPlayer->SetDirection(packet->direction);
+                currentPlayer->SetAction(12345);
+                currentPlayer->SetActionStand();
+                break;
+            }
+        }
+    }
+    void PacketProcMoveStop(Packet& rawPacket)
+    {
+        unsigned int playerID;
+        BYTE direction;
+        unsigned short x;
+        unsigned short y;
+
+        rawPacket >> playerID >> direction >> x >> y;
+
+        //printf("PlayerID -> %d\n", playerID);
+        //printf("Direction -> %d\n", playerID);
+        //printf("x -> %d\n", x);
+        //printf("y -> %d\n", y);
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(x, y);
+                currentPlayer->SetDirection(direction);
+                currentPlayer->SetAction(12345);
+                currentPlayer->SetActionStand();
+                break;
+            }
+        }
+    }
+    void PacketProcAttack1(char* rawPacket)
+    {
+        SC_PacketAttack1* packet = (SC_PacketAttack1*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == packet->playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(packet->x, packet->y);
+                currentPlayer->SetDirection(packet->direction);
+                currentPlayer->SetActionAttack1();
+                currentPlayer->SetAction(ACTION_ATTACK1);
+                break;
+            }
+        }
+    }
+    void PacketProcAttack1(Packet& rawPacket)
+    {
+        unsigned int playerID;
+        BYTE direction;
+        unsigned short x;
+        unsigned short y;
+
+        rawPacket >> playerID >> direction >> x >> y;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(x, y);
+                currentPlayer->SetDirection(direction);
+                currentPlayer->SetActionAttack1();
+                currentPlayer->SetAction(ACTION_ATTACK1);
+                break;
+            }
+        }
+    }
+    void PacketProcAttack2(char* rawPacket)
+    {
+        SC_PacketAttack2* packet = (SC_PacketAttack2*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == packet->playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(packet->x, packet->y);
+                currentPlayer->SetDirection(packet->direction);
+                currentPlayer->SetActionAttack2();
+                currentPlayer->SetAction(ACTION_ATTACK2);
+                break;
+            }
+        }
+    }
+    void PacketProcAttack2(Packet& rawPacket)
+    {
+        unsigned int playerID;
+        BYTE direction;
+        unsigned short x;
+        unsigned short y;
+
+        rawPacket >> playerID >> direction >> x >> y;
+
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(x, y);
+                currentPlayer->SetDirection(direction);
+                currentPlayer->SetActionAttack2();
+                currentPlayer->SetAction(ACTION_ATTACK2);
+                break;
+            }
+        }
+    }
+    void PacketProcAttack3(char* rawPacket)
+    {
+        SC_PacketAttack3* packet = (SC_PacketAttack3*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == packet->playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(packet->x, packet->y);
+                currentPlayer->SetDirection(packet->direction);
+                currentPlayer->SetActionAttack3();
+                currentPlayer->SetAction(ACTION_ATTACK3);
+                break;
+            }
+        }
+    }
+    void PacketProcAttack3(Packet& rawPacket)
+    {
+        unsigned int playerID;
+        BYTE direction;
+        unsigned short x;
+        unsigned short y;
+
+        rawPacket >> playerID >> direction >> x >> y;
+
+        auto iter = g_ObjectList.begin();
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectID() == playerID)
+            {
+                PlayerObject* currentPlayer = (PlayerObject*)*iter;
+                currentPlayer->SetPosition(x, y);
+                currentPlayer->SetDirection(direction);
+                currentPlayer->SetActionAttack3();
+                currentPlayer->SetAction(ACTION_ATTACK3);
+                break;
+            }
+        }
+    }
+    void PacketProcDamage(char* rawPacket)
+    {
+        SC_PacketDamage* packet = (SC_PacketDamage*)rawPacket;
+        auto iter = g_ObjectList.begin();
+        PlayerObject* createEffectPlayer = nullptr;
+        int originHP;
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectType() == e_OBJECT_TYPE::TYPE_EFFECT) continue;
+            if ((*iter)->GetObjectID() == packet->damagePlayerID)
+            {
+                PlayerObject* hitPlayer = (PlayerObject*)*iter;
+                createEffectPlayer = hitPlayer;
+                originHP = hitPlayer->GetHP();
+                hitPlayer->SetHP(packet->damageHP);
+                continue;
+            }
+            if ((*iter)->GetObjectID() == packet->attackPlayerID)
+            {
+                PlayerObject* attackPlayer = (PlayerObject*)*iter;
+            }
+        }
+        if (createEffectPlayer != nullptr)
+        {
+            if (originHP - createEffectPlayer->GetHP() == 1)
+                createEffectPlayer->CreateEffect(5, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
+            else if (originHP - createEffectPlayer->GetHP() == 2)
+                createEffectPlayer->CreateEffect(8, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
+            else createEffectPlayer->CreateEffect(10, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 75);
+        }
+    }
+    void PacketProcDamage(Packet& rawPacket)
+    {
+        unsigned int attackPlayerID;
+        unsigned int damagePlayerID;
+        BYTE damageHP;
+
+        rawPacket >> attackPlayerID >> damagePlayerID >> damageHP;
+
+        auto iter = g_ObjectList.begin();
+        PlayerObject* createEffectPlayer = nullptr;
+        int originHP;
+        for (; iter != g_ObjectList.end(); ++iter)
+        {
+            if ((*iter)->GetObjectType() == e_OBJECT_TYPE::TYPE_EFFECT) continue;
+            if ((*iter)->GetObjectID() == damagePlayerID)
+            {
+                PlayerObject* hitPlayer = (PlayerObject*)*iter;
+                createEffectPlayer = hitPlayer;
+                originHP = hitPlayer->GetHP();
+                hitPlayer->SetHP(damageHP);
+                continue;
+            }
+            if ((*iter)->GetObjectID() == attackPlayerID)
+            {
+                PlayerObject* attackPlayer = (PlayerObject*)*iter;
+            }
+        }
+        if (createEffectPlayer != nullptr)
+        {
+            if (originHP - createEffectPlayer->GetHP() == 1)
+                createEffectPlayer->CreateEffect(5, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
+            else if (originHP - createEffectPlayer->GetHP() == 2)
+                createEffectPlayer->CreateEffect(8, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
+            else createEffectPlayer->CreateEffect(10, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 75);
         }
     }
 }
 
-
-void PacketProcMoveStop(char* rawPacket)
-{
-    SC_PacketMoveStop* packet = (SC_PacketMoveStop*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == packet->playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(packet->x, packet->y);
-            currentPlayer->SetDirection(packet->direction);
-            currentPlayer->SetAction(12345);
-            currentPlayer->SetActionStand();
-            break;
-        }
-    }
-}
-void PacketProcMoveStop(Packet& rawPacket)
-{
-    unsigned int playerID;
-    BYTE direction;
-    unsigned short x;
-    unsigned short y;
-
-    rawPacket >> playerID >> direction >> x >> y;
-
-    //printf("PlayerID -> %d\n", playerID);
-    //printf("Direction -> %d\n", playerID);
-    //printf("x -> %d\n", x);
-    //printf("y -> %d\n", y);
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(x, y);
-            currentPlayer->SetDirection(direction);
-            currentPlayer->SetAction(12345);
-            currentPlayer->SetActionStand();
-            break;
-        }
-    }
-}
-
-
-void PacketProcAttack1(char* rawPacket)
-{
-    SC_PacketAttack1* packet = (SC_PacketAttack1*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == packet->playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(packet->x, packet->y);
-            currentPlayer->SetDirection(packet->direction);
-            currentPlayer->SetActionAttack1();
-            currentPlayer->SetAction(ACTION_ATTACK1);
-            break;
-        }
-    }
-}
-void PacketProcAttack1(Packet& rawPacket)
-{
-    unsigned int playerID;
-    BYTE direction;
-    unsigned short x;
-    unsigned short y;
-
-    rawPacket >> playerID >> direction >> x >> y;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(x, y);
-            currentPlayer->SetDirection(direction);
-            currentPlayer->SetActionAttack1();
-            currentPlayer->SetAction(ACTION_ATTACK1);
-            break;
-        }
-    }
-}
-
-
-void PacketProcAttack2(char* rawPacket)
-{
-    SC_PacketAttack2* packet = (SC_PacketAttack2*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == packet->playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(packet->x, packet->y);
-            currentPlayer->SetDirection(packet->direction);
-            currentPlayer->SetActionAttack2();
-            currentPlayer->SetAction(ACTION_ATTACK2);
-            break;
-        }
-    }
-}
-void PacketProcAttack2(Packet& rawPacket)
-{
-    unsigned int playerID;
-    BYTE direction;
-    unsigned short x;
-    unsigned short y;
-
-    rawPacket >> playerID >> direction >> x >> y;
-
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(x, y);
-            currentPlayer->SetDirection(direction);
-            currentPlayer->SetActionAttack2();
-            currentPlayer->SetAction(ACTION_ATTACK2);
-            break;
-        }
-    }
-}
-
-
-void PacketProcAttack3(char* rawPacket)
-{
-    SC_PacketAttack3* packet = (SC_PacketAttack3*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == packet->playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(packet->x, packet->y);
-            currentPlayer->SetDirection(packet->direction);
-            currentPlayer->SetActionAttack3();
-            currentPlayer->SetAction(ACTION_ATTACK3);
-            break;
-        }
-    }
-}
-void PacketProcAttack3(Packet& rawPacket)
-{
-    unsigned int playerID;
-    BYTE direction;
-    unsigned short x;
-    unsigned short y;
-
-    rawPacket >> playerID >> direction >> x >> y;
-
-    auto iter = g_ObjectList.begin();
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectID() == playerID)
-        {
-            PlayerObject* currentPlayer = (PlayerObject*)*iter;
-            currentPlayer->SetPosition(x, y);
-            currentPlayer->SetDirection(direction);
-            currentPlayer->SetActionAttack3();
-            currentPlayer->SetAction(ACTION_ATTACK3);
-            break;
-        }
-    }
-}
-
-
-void PacketProcDamage(char* rawPacket)
-{
-    SC_PacketDamage* packet = (SC_PacketDamage*)rawPacket;
-    auto iter = g_ObjectList.begin();
-    PlayerObject* createEffectPlayer = nullptr;
-    int originHP;
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectType() == e_OBJECT_TYPE::TYPE_EFFECT) continue;
-        if ((*iter)->GetObjectID() == packet->damagePlayerID)
-        {
-            PlayerObject* hitPlayer = (PlayerObject*)*iter;
-            createEffectPlayer = hitPlayer;
-            originHP = hitPlayer->GetHP();
-            hitPlayer->SetHP(packet->damageHP);
-            continue;
-        }
-        if ((*iter)->GetObjectID() == packet->attackPlayerID)
-        {
-            PlayerObject* attackPlayer = (PlayerObject*)*iter;
-        }
-    }
-    if (createEffectPlayer != nullptr)
-    {
-        if(originHP - createEffectPlayer->GetHP() ==1)
-        createEffectPlayer->CreateEffect(5, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() -55);
-        else if (originHP - createEffectPlayer->GetHP() == 2)
-            createEffectPlayer->CreateEffect(8, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
-        else createEffectPlayer->CreateEffect(10, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 75);
-    }
-}
-void PacketProcDamage(Packet& rawPacket)
-{
-    unsigned int attackPlayerID;
-    unsigned int damagePlayerID;
-    BYTE damageHP;
-
-    rawPacket >> attackPlayerID >> damagePlayerID >> damageHP;
-
-    auto iter = g_ObjectList.begin();
-    PlayerObject* createEffectPlayer = nullptr;
-    int originHP;
-    for (; iter != g_ObjectList.end(); ++iter)
-    {
-        if ((*iter)->GetObjectType() == e_OBJECT_TYPE::TYPE_EFFECT) continue;
-        if ((*iter)->GetObjectID() == damagePlayerID)
-        {
-            PlayerObject* hitPlayer = (PlayerObject*)*iter;
-            createEffectPlayer = hitPlayer;
-            originHP = hitPlayer->GetHP();
-            hitPlayer->SetHP(damageHP);
-            continue;
-        }
-        if ((*iter)->GetObjectID() == attackPlayerID)
-        {
-            PlayerObject* attackPlayer = (PlayerObject*)*iter;
-        }
-    }
-    if (createEffectPlayer != nullptr)
-    {
-        if (originHP - createEffectPlayer->GetHP() == 1)
-            createEffectPlayer->CreateEffect(5, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
-        else if (originHP - createEffectPlayer->GetHP() == 2)
-            createEffectPlayer->CreateEffect(8, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 55);
-        else createEffectPlayer->CreateEffect(10, createEffectPlayer->GetCurrentX(), createEffectPlayer->GetCurrentY() - 75);
-    }
-}
 
 
 // Packet Procedure End
@@ -1126,7 +1116,7 @@ void KeyProcess()
         bool sendFlag = false;
         int size;
         char* packetPointer = nullptr;
-        Packet pk;
+        univ_dev::Packet pk;
         switch (actionType)
         {
         case ACTION_ATTACK1:
@@ -1217,135 +1207,135 @@ void KeyProcess()
 }
 void UpdateObject()
 {
-    for (__int64 i = 0; i < g_ObjectList.size(); i++)
+    for (__int64 i = 0; i < univ_dev::g_ObjectList.size(); i++)
     {
-        g_ObjectList[i]->Update();
+        univ_dev::g_ObjectList[i]->Update();
     }
 }
 
 void Render()
 {
-    BYTE* dibBuffer = g_ScreenDibBuffer.GetDibBuffer();
-    int width = g_ScreenDibBuffer.GetWidth();
-    int height = g_ScreenDibBuffer.GetHeight();
-    int pitch = g_ScreenDibBuffer.GetPitch();
-    g_SpriteDibBuffer.DrawSprite((int)e_SPRITE::MAP, 0, 0, dibBuffer, width, height, pitch);
+    BYTE* dibBuffer = univ_dev::g_ScreenDibBuffer.GetDibBuffer();
+    int width = univ_dev::g_ScreenDibBuffer.GetWidth();
+    int height = univ_dev::g_ScreenDibBuffer.GetHeight();
+    int pitch = univ_dev::g_ScreenDibBuffer.GetPitch();
+    univ_dev::g_SpriteDibBuffer.DrawSprite((int)univ_dev::e_SPRITE::MAP, 0, 0, dibBuffer, width, height, pitch);
 
     LayerOrdering();
-    for (__int64 i = 0; i < g_ObjectList.size(); i++)
+    for (__int64 i = 0; i < univ_dev::g_ObjectList.size(); i++)
     {
-        g_ObjectList[i]->Render(dibBuffer, width, height, pitch);
+        univ_dev::g_ObjectList[i]->Render(dibBuffer, width, height, pitch);
     }
-    g_ScreenDibBuffer.DrawBuffer(g_hWnd);
+    univ_dev::g_ScreenDibBuffer.DrawBuffer(g_hWnd);
 }
 bool InitialGame()
 {
     //load on memory
 //C:\Users\user\Desktop\Education\procademy\TCPFighter\TCPFighter_Procademy\Sprite_Data
     //Load Map
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::MAP, L"Sprite_Data\\_Map.bmp", 0, 0)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::MAP, L"Sprite_Data\\_Map.bmp", 0, 0)) return false;
     //Load Left Standing
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_L01, L"Sprite_Data/Stand_L_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_L02, L"Sprite_Data/Stand_L_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_L03, L"Sprite_Data/Stand_L_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_L04, L"Sprite_Data/Stand_L_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_L05, L"Sprite_Data/Stand_L_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_L01, L"Sprite_Data/Stand_L_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_L02, L"Sprite_Data/Stand_L_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_L03, L"Sprite_Data/Stand_L_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_L04, L"Sprite_Data/Stand_L_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_L05, L"Sprite_Data/Stand_L_01.bmp", 71, 90)) return false;
     //Load Right Standing
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_R01, L"Sprite_Data/Stand_R_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_R02, L"Sprite_Data/Stand_R_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_R03, L"Sprite_Data/Stand_R_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_R04, L"Sprite_Data/Stand_R_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_STAND_R05, L"Sprite_Data/Stand_R_01.bmp", 71, 90)) return false;
-    //Load Left Move
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L01, L"Sprite_Data/Move_L_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L02, L"Sprite_Data/Move_L_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L03, L"Sprite_Data/Move_L_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L04, L"Sprite_Data/Move_L_04.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L05, L"Sprite_Data/Move_L_05.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L06, L"Sprite_Data/Move_L_06.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L07, L"Sprite_Data/Move_L_07.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L08, L"Sprite_Data/Move_L_08.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L09, L"Sprite_Data/Move_L_09.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L10, L"Sprite_Data/Move_L_10.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L11, L"Sprite_Data/Move_L_11.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_L12, L"Sprite_Data/Move_L_12.bmp", 71, 90)) return false;
-    //Load Right Move
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R01, L"Sprite_Data/Move_R_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R02, L"Sprite_Data/Move_R_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R03, L"Sprite_Data/Move_R_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R04, L"Sprite_Data/Move_R_04.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R05, L"Sprite_Data/Move_R_05.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R06, L"Sprite_Data/Move_R_06.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R07, L"Sprite_Data/Move_R_07.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R08, L"Sprite_Data/Move_R_08.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R09, L"Sprite_Data/Move_R_09.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R10, L"Sprite_Data/Move_R_10.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R11, L"Sprite_Data/Move_R_11.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_MOVE_R12, L"Sprite_Data/Move_R_12.bmp", 71, 90)) return false;
-    //Load Left Attack1
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_L01, L"Sprite_Data/Attack1_L_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_L02, L"Sprite_Data/Attack1_L_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_L03, L"Sprite_Data/Attack1_L_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_L04, L"Sprite_Data/Attack1_L_04.bmp", 71, 90)) return false;
-    //Load Right Attack1
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_R01, L"Sprite_Data/Attack1_R_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_R02, L"Sprite_Data/Attack1_R_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_R03, L"Sprite_Data/Attack1_R_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK1_R04, L"Sprite_Data/Attack1_R_04.bmp", 71, 90)) return false;
-    //Load Left Attack2
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_L01, L"Sprite_Data/Attack2_L_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_L02, L"Sprite_Data/Attack2_L_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_L03, L"Sprite_Data/Attack2_L_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_L04, L"Sprite_Data/Attack2_L_04.bmp", 71, 90)) return false;
-    //Load Right Attack2
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_R01, L"Sprite_Data/Attack2_R_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_R02, L"Sprite_Data/Attack2_R_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_R03, L"Sprite_Data/Attack2_R_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK2_R04, L"Sprite_Data/Attack2_R_04.bmp", 71, 90)) return false;
-    //Load Left Attack3
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_L01, L"Sprite_Data/Attack3_L_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_L02, L"Sprite_Data/Attack3_L_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_L03, L"Sprite_Data/Attack3_L_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_L04, L"Sprite_Data/Attack3_L_04.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_L05, L"Sprite_Data/Attack3_L_05.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_L06, L"Sprite_Data/Attack3_L_06.bmp", 71, 90)) return false;
-    //Load Right Attack3
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_R01, L"Sprite_Data/Attack3_R_01.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_R02, L"Sprite_Data/Attack3_R_02.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_R03, L"Sprite_Data/Attack3_R_03.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_R04, L"Sprite_Data/Attack3_R_04.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_R05, L"Sprite_Data/Attack3_R_05.bmp", 71, 90)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::PLAYER_ATTACK3_R06, L"Sprite_Data/Attack3_R_06.bmp", 71, 90)) return false;
-    //Load Effect Spark
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::EFFECT_SPARK_01, L"Sprite_Data/xSpark_1.bmp", 70, 70)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::EFFECT_SPARK_02, L"Sprite_Data/xSpark_2.bmp", 70, 70)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::EFFECT_SPARK_03, L"Sprite_Data/xSpark_3.bmp", 70, 70)) return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::EFFECT_SPARK_04, L"Sprite_Data/xSpark_4.bmp", 70, 70)) return false;
-    //Load HPGuage, Shadow
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::GUAGE_HP, L"Sprite_Data/HPGuage.bmp", 35, -10))return false;
-    if (!g_SpriteDibBuffer.LoadDibSprite((int)e_SPRITE::SHADOW, L"Sprite_Data/Shadow.bmp", 32, 4))return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_R01, L"Sprite_Data/Stand_R_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_R02, L"Sprite_Data/Stand_R_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_R03, L"Sprite_Data/Stand_R_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_R04, L"Sprite_Data/Stand_R_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_STAND_R05, L"Sprite_Data/Stand_R_01.bmp", 71, 90)) return false;
+    //Load Left Move                          
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L01, L"Sprite_Data/Move_L_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L02, L"Sprite_Data/Move_L_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L03, L"Sprite_Data/Move_L_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L04, L"Sprite_Data/Move_L_04.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L05, L"Sprite_Data/Move_L_05.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L06, L"Sprite_Data/Move_L_06.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L07, L"Sprite_Data/Move_L_07.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L08, L"Sprite_Data/Move_L_08.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L09, L"Sprite_Data/Move_L_09.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L10, L"Sprite_Data/Move_L_10.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L11, L"Sprite_Data/Move_L_11.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_L12, L"Sprite_Data/Move_L_12.bmp", 71, 90)) return false;
+    //Load Right Move                         
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R01, L"Sprite_Data/Move_R_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R02, L"Sprite_Data/Move_R_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R03, L"Sprite_Data/Move_R_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R04, L"Sprite_Data/Move_R_04.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R05, L"Sprite_Data/Move_R_05.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R06, L"Sprite_Data/Move_R_06.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R07, L"Sprite_Data/Move_R_07.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R08, L"Sprite_Data/Move_R_08.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R09, L"Sprite_Data/Move_R_09.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R10, L"Sprite_Data/Move_R_10.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R11, L"Sprite_Data/Move_R_11.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_MOVE_R12, L"Sprite_Data/Move_R_12.bmp", 71, 90)) return false;
+    //Load Left Attack1                       
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_L01, L"Sprite_Data/Attack1_L_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_L02, L"Sprite_Data/Attack1_L_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_L03, L"Sprite_Data/Attack1_L_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_L04, L"Sprite_Data/Attack1_L_04.bmp", 71, 90)) return false;
+    //Load Right Attack1                      
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_R01, L"Sprite_Data/Attack1_R_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_R02, L"Sprite_Data/Attack1_R_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_R03, L"Sprite_Data/Attack1_R_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK1_R04, L"Sprite_Data/Attack1_R_04.bmp", 71, 90)) return false;
+    //Load Left Attack2                       
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_L01, L"Sprite_Data/Attack2_L_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_L02, L"Sprite_Data/Attack2_L_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_L03, L"Sprite_Data/Attack2_L_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_L04, L"Sprite_Data/Attack2_L_04.bmp", 71, 90)) return false;
+    //Load Right Attack2                      
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_R01, L"Sprite_Data/Attack2_R_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_R02, L"Sprite_Data/Attack2_R_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_R03, L"Sprite_Data/Attack2_R_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK2_R04, L"Sprite_Data/Attack2_R_04.bmp", 71, 90)) return false;
+    //Load Left Attack3                       
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_L01, L"Sprite_Data/Attack3_L_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_L02, L"Sprite_Data/Attack3_L_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_L03, L"Sprite_Data/Attack3_L_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_L04, L"Sprite_Data/Attack3_L_04.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_L05, L"Sprite_Data/Attack3_L_05.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_L06, L"Sprite_Data/Attack3_L_06.bmp", 71, 90)) return false;
+    //Load Right Attack3                      
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_R01, L"Sprite_Data/Attack3_R_01.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_R02, L"Sprite_Data/Attack3_R_02.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_R03, L"Sprite_Data/Attack3_R_03.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_R04, L"Sprite_Data/Attack3_R_04.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_R05, L"Sprite_Data/Attack3_R_05.bmp", 71, 90)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::PLAYER_ATTACK3_R06, L"Sprite_Data/Attack3_R_06.bmp", 71, 90)) return false;
+    //Load Effect Spark                       
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::EFFECT_SPARK_01, L"Sprite_Data/xSpark_1.bmp", 70, 70)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::EFFECT_SPARK_02, L"Sprite_Data/xSpark_2.bmp", 70, 70)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::EFFECT_SPARK_03, L"Sprite_Data/xSpark_3.bmp", 70, 70)) return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::EFFECT_SPARK_04, L"Sprite_Data/xSpark_4.bmp", 70, 70)) return false;
+    //Load HPGuage, Shadow                    
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::GUAGE_HP, L"Sprite_Data/HPGuage.bmp", 35, -10))return false;
+    if (!univ_dev::g_SpriteDibBuffer.LoadDibSprite((int)univ_dev::e_SPRITE::SHADOW, L"Sprite_Data/Shadow.bmp", 32, 4))return false;
 
     return true;
 }
 
 void LayerOrdering()
 {
-    if (g_ObjectList.size() <= 1) return;
-    for (__int64 i = 0; i < g_ObjectList.size()-1; i++)
+    if (univ_dev::g_ObjectList.size() <= 1) return;
+    for (__int64 i = 0; i < univ_dev::g_ObjectList.size()-1; i++)
     {
-        for (__int64 j = i; j < g_ObjectList.size()-1; j++)
+        for (__int64 j = i; j < univ_dev::g_ObjectList.size()-1; j++)
         {
-            if (g_ObjectList[j]->GetCurrentY() > g_ObjectList[j+1]->GetCurrentY())
-                std::swap(g_ObjectList[j + 1], g_ObjectList[j]);
+            if (univ_dev::g_ObjectList[j]->GetCurrentY() > univ_dev::g_ObjectList[j+1]->GetCurrentY())
+                std::swap(univ_dev::g_ObjectList[j + 1], univ_dev::g_ObjectList[j]);
 
         }
     }
-    for (__int64 i = 0; i < g_ObjectList.size()-1; i++)
+    for (__int64 i = 0; i < univ_dev::g_ObjectList.size()-1; i++)
     {
-        for (__int64 j = i; j < g_ObjectList.size()-1; j++)
+        for (__int64 j = i; j < univ_dev::g_ObjectList.size()-1; j++)
         {
-            if (g_ObjectList[j]->GetObjectType() == e_OBJECT_TYPE::TYPE_EFFECT && g_ObjectList[j+1]->GetObjectType() != e_OBJECT_TYPE::TYPE_EFFECT)
-                std::swap(g_ObjectList[j + 1], g_ObjectList[j]);
+            if (univ_dev::g_ObjectList[j]->GetObjectType() == e_OBJECT_TYPE::TYPE_EFFECT && univ_dev::g_ObjectList[j+1]->GetObjectType() != e_OBJECT_TYPE::TYPE_EFFECT)
+                std::swap(univ_dev::g_ObjectList[j + 1], univ_dev::g_ObjectList[j]);
         }
     }
 }

@@ -1,0 +1,462 @@
+Node생성후 연결해줄때 필요한 정보들
+
+right down
+right up 아주 잘됨
+
+left down
+left up 이상하게됨.
+1. currentNode에 대한 정보
+2. tileMap
+///
+		/// 수직 수평 노드
+		/// begin
+		/// 
+		
+		//오른쪽으로 진행 노드
+		PathNode tempNode = *currentNode;
+		tempNode.parent = currentNode;
+		
+		bool doLoopFlag = true;
+		if (currentNode->parent != nullptr && currentNode->x < currentNode->parent->x) doLoopFlag = false;
+		while (doLoopFlag)
+		{
+			tempNode.x++;
+			tempNode.HValue = std::abs((endXPoint - tempNode.x) * 10 + std::abs(endYPoint - tempNode.y) * 10);
+			tempNode.GValue += 10;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y))break;
+
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y + 1)) ||
+				(tileMap.IsBlocked(tempNode.x, tempNode.y - 1) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y - 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+
+		//위쪽 노드
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+		doLoopFlag = true;
+		if (currentNode->parent != nullptr && currentNode->y > currentNode->parent->y) doLoopFlag = false;
+		while (doLoopFlag)
+		{
+			tempNode.y--;
+			tempNode.HValue = std::abs((endXPoint - tempNode.x) * 10 + std::abs(endYPoint - tempNode.y) * 10);
+			tempNode.GValue += 10;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y))break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x + 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y - 1)) ||
+				(tileMap.IsBlocked(tempNode.x - 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y - 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+
+
+		//왼쪽 노드
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+		doLoopFlag = true;
+		if (currentNode->parent != nullptr && currentNode->x > currentNode->parent->x) doLoopFlag = false;
+		while (doLoopFlag)
+		{
+			tempNode.x--;
+			tempNode.HValue = std::abs((endXPoint - tempNode.x) * 10 + std::abs(endYPoint - tempNode.y) * 10);
+			tempNode.GValue += 10;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y))break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y + 1)) ||
+				(tileMap.IsBlocked(tempNode.x, tempNode.y - 1) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y - 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+
+
+		//아랫쪽 노드
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+		doLoopFlag = true;
+		if (currentNode->parent != nullptr && currentNode->y < currentNode->parent->y) doLoopFlag = false;
+		while (doLoopFlag)
+		{
+			tempNode.y++;
+			tempNode.HValue = std::abs((endXPoint - tempNode.x) * 10 + std::abs(endYPoint - tempNode.y) * 10);
+			tempNode.GValue += 10;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y))break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x + 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y + 1)) ||
+				(tileMap.IsBlocked(tempNode.x - 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y + 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+		///
+		/// 수직 수평 노드
+		/// end
+		/// 
+
+
+
+		///
+		/// 대각선 노드
+		/// begin
+		///  
+		
+
+		// 오른쪽 위
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+
+		//오른쪽 위 조건 체크
+		while (true)
+		{
+			tempNode.x++;
+			tempNode.y--;
+			int xForDiagonal = tempNode.x;
+			int yForDiagonal = tempNode.y;
+			tempNode.HValue = (std::abs((endXPoint - tempNode.x) + std::abs(endYPoint - tempNode.y)) * 10);
+			tempNode.GValue += 14;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y)) break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x - 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y + 1)) ||
+				(tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y - 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			while (true)
+			{
+				xForDiagonal++;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal, yForDiagonal + 1) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal + 1)) ||
+					(tileMap.IsBlocked(xForDiagonal, yForDiagonal - 1) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal - 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			xForDiagonal = tempNode.x;
+			yForDiagonal = tempNode.y;
+			while (true)
+			{
+				yForDiagonal--;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal - 1)) ||
+					(tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal - 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+
+
+		//오른쪽 아래
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+
+		while (true)
+		{
+			tempNode.x++;
+			tempNode.y++;
+			int xForDiagonal = tempNode.x;
+			int yForDiagonal = tempNode.y;
+			tempNode.HValue = (std::abs((endXPoint - tempNode.x) + std::abs(endYPoint - tempNode.y)) * 10);
+			tempNode.GValue += 14;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y)) break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y + 1)) ||
+				(tileMap.IsBlocked(tempNode.x - 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y - 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y,true);
+				break;
+			}
+			while (true)
+			{
+				xForDiagonal++;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal, yForDiagonal + 1) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal + 1)) ||
+					(tileMap.IsBlocked(xForDiagonal, yForDiagonal - 1) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal - 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			xForDiagonal = tempNode.x;
+			yForDiagonal = tempNode.y;
+			while (true)
+			{
+				yForDiagonal++;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal + 1)) ||
+					(tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal + 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+
+
+		//왼쪽 아래
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+		while (true)
+		{
+			tempNode.x--;
+			tempNode.y++;
+			int xForDiagonal = tempNode.x;
+			int yForDiagonal = tempNode.y;
+			tempNode.HValue = (std::abs((endXPoint - tempNode.x) + std::abs(endYPoint - tempNode.y)) * 10);
+			tempNode.GValue += 14;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y)) break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x, tempNode.y + 1) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y + 1)) ||
+				(tileMap.IsBlocked(tempNode.x + 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y - 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			while (true)
+			{
+				xForDiagonal--;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal, yForDiagonal + 1) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal + 1)) ||
+					(tileMap.IsBlocked(xForDiagonal, yForDiagonal - 1) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal - 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			xForDiagonal = tempNode.x;
+			yForDiagonal = tempNode.y;
+			while (true)
+			{
+				yForDiagonal++;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal + 1)) ||
+					(tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal + 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+
+		// 왼쪽 위
+		tempNode = *currentNode;
+		tempNode.parent = currentNode;
+		while (true)
+		{
+			tempNode.x--;
+			tempNode.y--;
+			int xForDiagonal = tempNode.x;
+			int yForDiagonal = tempNode.y;
+			tempNode.HValue = (std::abs((endXPoint - tempNode.x) + std::abs(endYPoint - tempNode.y)) * 10);
+			tempNode.GValue += 14;
+			tempNode.FValue = tempNode.GValue + tempNode.HValue;
+
+			if (tileMap.IsBlocked(tempNode.x, tempNode.y)) break;
+			if (tempNode.x == endXPoint && tempNode.y == endYPoint)
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			if ((tileMap.IsBlocked(tempNode.x, tempNode.y - 1) && !tileMap.IsBlocked(tempNode.x - 1, tempNode.y - 1)) ||
+				(tileMap.IsBlocked(tempNode.x + 1, tempNode.y) && !tileMap.IsBlocked(tempNode.x + 1, tempNode.y + 1)))
+			{
+				PathNode* newNode = new PathNode(tempNode);
+				openList.push_back(newNode);
+				tileMap.SetOpenList(newNode->x, newNode->y, true);
+				break;
+			}
+			while (true)
+			{
+				xForDiagonal--;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal, yForDiagonal + 1) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal + 1)) ||
+					(tileMap.IsBlocked(xForDiagonal, yForDiagonal - 1) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal - 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			xForDiagonal = tempNode.x;
+			yForDiagonal = tempNode.y;
+			while (true)
+			{
+				yForDiagonal--;
+				if (tileMap.IsBlocked(xForDiagonal, yForDiagonal)) break;
+				if (xForDiagonal == endXPoint && yForDiagonal == endYPoint)
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				if ((tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal + 1, yForDiagonal - 1)) ||
+					(tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal) && !tileMap.IsBlocked(xForDiagonal - 1, yForDiagonal - 1)))
+				{
+					PathNode* newNode = new PathNode(tempNode);
+					openList.push_back(newNode);
+					tileMap.SetOpenList(newNode->x, newNode->y, true);
+					break;
+				}
+				tileMap.SetBlockColor(xForDiagonal, yForDiagonal, color);
+			}
+			tileMap.SetBlockColor(tempNode.x, tempNode.y, color);
+		}
+		///
+		///	대각선 노드
+		/// end
+		///
