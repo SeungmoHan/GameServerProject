@@ -2,6 +2,7 @@
 #pragma once
 #ifndef __RING_BUFFER_HEADER__
 #define __RING_BUFFER_HEADER__
+#define __UNIV_DEVELOPER_
 
 
 namespace univ_dev

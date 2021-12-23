@@ -1,6 +1,8 @@
 #include "RingBuffer.h"
 #include <cstdlib>
 
+///__univ_developer_ring_buffer_
+
 namespace univ_dev
 {
 	RingBuffer::RingBuffer() : ringBufferSize(10000)
