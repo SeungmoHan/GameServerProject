@@ -2,6 +2,7 @@
 #include "SerializingBuffer.h"
 #include <string>
 
+///__univ_developer_serialize_buffer_
 
 namespace univ_dev
 {

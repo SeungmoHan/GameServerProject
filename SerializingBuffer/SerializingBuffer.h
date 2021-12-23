@@ -1,7 +1,7 @@
 #pragma once
 #ifndef __SERIALIZEING_BUFFER_HEADER__
 #define __SERIALIZEING_BUFFER_HEADER__
-#include <exception>
+#define __UNIV_DEVELOPER_
 
 namespace univ_dev
 {
