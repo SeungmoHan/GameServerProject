@@ -2,6 +2,8 @@
 #pragma once
 #ifndef __RED_BLACK_TREE_HEADER__
 #define __RED_BLACK_TREE_HEADER__
+#define __UNIV_DEVELOPER_
+
 #include <Windows.h>
 namespace univ_dev
 {
