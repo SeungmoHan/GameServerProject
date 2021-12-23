@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __PROFILER_HEADER__
 #define __PROFILER_HEADER__
+#define __UNIV_DEVELOPER_
 #include <Windows.h>
 
 #define __UNIV_DEV_PROFILE

@@ -5,6 +5,8 @@
 #include <set>
 #include "profiler.h"
 
+//__univ_developer_AStar_
+
 int g_OperationCounting = 0;
 
 int g_OpenListSize = 0;

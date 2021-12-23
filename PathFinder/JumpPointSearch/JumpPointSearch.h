@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __JUMP_POINT_SEARCH_HEADER__
 #define __JUMP_POINT_SEARCH_HEADER__
+#define __UNIV_DEVELOPER_
 #include <list>
 #include "DrawStraightLine.h"
 #define OUT

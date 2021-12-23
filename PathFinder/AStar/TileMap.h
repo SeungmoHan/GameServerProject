@@ -1,7 +1,7 @@
 #pragma once
 #ifndef __TILE_MAP_HEADER__
 #define __TILE_MAP_HEADER__
-
+#define __UNIV_DEVELOPER_
 #define TILE_MAP_WIDTH 60
 #define TILE_MAP_HEIGHT 40
 

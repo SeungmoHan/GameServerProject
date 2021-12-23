@@ -2,6 +2,8 @@
 #include "TileMap.h"
 #include "profiler.h"
 
+/// __univ_developer_jps_
+
 namespace univ_dev
 {
 	int g_OperationCounting = 0;

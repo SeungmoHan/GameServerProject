@@ -1,5 +1,8 @@
 #include "TileMap.h"
 #include <memory.h>
+
+//__univ_developer_tile_map_
+
 bool TileMap::BlockTile(int x, int y,bool what)
 {
 	if (x < 0 || x >= TileMapSize::Width) return false;

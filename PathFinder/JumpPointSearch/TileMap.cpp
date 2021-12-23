@@ -1,5 +1,7 @@
 #include "TileMap.h"
 
+///__univ_developer_tile_map_
+
 namespace univ_dev
 {
 	bool TileMap::BlockTile(int x, int y, bool what)

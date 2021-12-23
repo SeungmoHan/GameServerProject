@@ -1,7 +1,7 @@
 #pragma once
 #ifndef __DRAW_STRAIGHT_LINE_HEADER__
 #define __DRAW_STRAIGHT_LINE_HEADER__
-
+#define __UNIV_DEVELOPER_
 
 namespace univ_dev
 {

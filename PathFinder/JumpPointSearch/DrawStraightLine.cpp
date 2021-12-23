@@ -1,6 +1,7 @@
 #include "DrawStraightLine.h"
 #include <algorithm>
 
+//__univ_developer_draw_straight_line_
 
 namespace univ_dev
 {

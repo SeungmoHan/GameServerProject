@@ -1,6 +1,9 @@
 #include "profiler.h"
 #include <stdio.h>
 #include <cstring>
+
+//__univ_developer_profiler_
+
 PROFILE_SAMPLE samples[SAMPLE_SIZE]{ 0 };
 
 void BeginProfiling(const char* name)

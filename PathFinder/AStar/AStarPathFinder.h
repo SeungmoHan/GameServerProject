@@ -1,6 +1,7 @@
 #pragma once
 #ifndef __PATHFINDER_HEADER__
 #define __PATHFINDER_HEADER__
+#define __UNIV_DEVELOPER_
 #include <list>
 #define OUT
 #define IN
