@@ -1,7 +1,9 @@
 #pragma once
 #ifndef __MEMORY_POOL__
 #define __MEMORY_POOL__
+#define __UNIV_DEVELOPER_
 
+/// __univ_developer_object_free_list_
 namespace univ_dev
 {
 #define CRASH() do{int*ptr =nullptr; *ptr =100;}while(0)
