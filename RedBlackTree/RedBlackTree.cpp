@@ -5,6 +5,8 @@
 #else
 #pragma comment(linker, "/entry:WinMainCRTStartup /subsystem:console")
 #endif
+
+#define __PRINT_WITH_WINAPI
 #include <iostream>
 #include <thread>
 #include <time.h>
@@ -60,7 +62,7 @@ void InputProc()
     }
 }
 
-
+#ifdef __PRINT_WITH_WINAPI
 namespace univ_dev
 {
     void RedBlackTree::Print(HDC hdc)
@@ -107,9 +109,8 @@ namespace univ_dev
             Print(root->pRightNode, depth, x, hdc);
         depth--;
     }
-
-
 }
+#endif
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
     _In_ LPWSTR    lpCmdLine,

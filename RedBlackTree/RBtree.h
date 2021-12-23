@@ -18,12 +18,13 @@ namespace univ_dev
 			int key;
 		};
 	public:
+#ifdef __PRINT_WITH_WINAPI
 		void Print(HDC hdc);
+#endif
 		RedBlackTree();
 		~RedBlackTree();
 		bool Insert(int data);
 		bool Remove(int data);
-		void Traverse();
 		void Release();
 		int GetNodeCount() { return nodeCount; }
 	private:
@@ -34,7 +35,6 @@ namespace univ_dev
 		int GetLeftChildCount(Node* root);
 		bool Remove(Node* root, int key);
 		void Release(Node* root);
-		//void Traverse(Node* root, int depth);
 		void RotateRight(Node* root);
 		void RotateLeft(Node* root);
 		void BalanceTree(Node* root);

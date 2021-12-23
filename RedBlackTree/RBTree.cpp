@@ -1,5 +1,6 @@
 #include "RBtree.h"
-#include <iostream>
+
+
 namespace univ_dev
 {
 	RedBlackTree::RedBlackTree() : m_NilNode{ &m_NilNode,&m_NilNode,&m_NilNode,NodeColor::BLACK,0 },root(&m_NilNode), nodeCount(0){root = &m_NilNode; };
@@ -32,10 +33,6 @@ namespace univ_dev
 		return Remove(root, data);
 	}
 
-	void RedBlackTree::Traverse()
-	{
-		//return Traverse(root, 1);
-	}
 
 	void RedBlackTree::Release()
 	{
@@ -237,13 +234,7 @@ namespace univ_dev
 		Release(root->pRightNode);
 		delete root;
 	}
-	//void RedBlackTree::Traverse(Node* root, int depth)
-	//{
-	//	if (root == &m_NilNode) return;
-	//	Traverse(root->pLeftNode, depth + 1);
-	//	printf("%d ", root->key);
-	//	Traverse(root->pRightNode, depth + 1);
-	//}
+
 
 	void RedBlackTree::RotateRight(Node* root)
 	{
