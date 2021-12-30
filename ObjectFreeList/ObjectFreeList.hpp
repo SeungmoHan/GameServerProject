@@ -1,9 +1,9 @@
 #pragma once
 #ifndef __MEMORY_POOL__
 #define __MEMORY_POOL__
-#define __UNIV_DEVELOPER_
 
-/// __univ_developer_object_free_list_
+#include <cstdlib>
+#include <new>
 namespace univ_dev
 {
 #define CRASH() do{int*ptr =nullptr; *ptr =100;}while(0)
@@ -58,7 +58,7 @@ namespace univ_dev
 				temp = next;
 				capacity--;
 			}
-			printf("capacity : %d", capacity);
+			//printf("capacity : %d", capacity);
 		};
 
 		ObjectType* Alloc()
