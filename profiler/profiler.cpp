@@ -1,8 +1,7 @@
 #include "profiler.h"
 #include <stdio.h>
 #include <cstring>
-
-///__univ_developer_profiler
+#include <ctime>
 
 namespace univ_dev
 {
@@ -94,7 +93,34 @@ namespace univ_dev
 	void SaveProfiling()
 	{
 		FILE* file;
-		fopen_s(&file, "Profile.csv", "wb");
+		time_t timer = time(nullptr);
+		tm t;
+		localtime_s(&t, &timer);
+		char fileName[100]{ 0 };
+
+		char tempBuffer[20]{ 0 };
+
+		strcat_s(fileName, "ServerProfile\\");
+		_itoa_s(t.tm_year + 1900, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "_");
+		_itoa_s(t.tm_mon + 1, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "_");
+		_itoa_s(t.tm_mday, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "_");
+		_itoa_s(t.tm_hour + 1, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "_");
+		_itoa_s(t.tm_min, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "_");
+		_itoa_s(t.tm_sec, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "Profile.csv");
+		printf(fileName);
+		fopen_s(&file, fileName, "wb");
 		LARGE_INTEGER freq;
 		QueryPerformanceFrequency(&freq);
 		if (file == nullptr) return;

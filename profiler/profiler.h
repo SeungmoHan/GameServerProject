@@ -1,10 +1,7 @@
 #pragma once
 #ifndef __PROFILER_HEADER__
 #define __PROFILER_HEADER__
-#define __UNIV_DEVELOPER_
-
 #include <Windows.h>
-constexpr int SAMPLE_SIZE = 10;
 
 #ifdef PROFILE
 
@@ -16,22 +13,42 @@ constexpr int SAMPLE_SIZE = 10;
 #define END_PROFILE(arg)
 
 #endif 
-
-struct PROFILE_SAMPLE
+namespace univ_dev
 {
-	bool flag;
-	char profileName[64];
-	LARGE_INTEGER startTime;
-	__int64 totalTime;
-	__int64 min[2];
-	__int64 max[2];
-	__int64 callCounts;
-};
+
+	void BeginProfiling(const char* name);
+	void EndProfiling(const char* name);
+	void SaveProfiling();
+	void ResetProfiling();
+
+	class Profiler
+	{
+	public:
+		Profiler(const char* name) : name(name)
+		{
+			BeginProfiling(name);
+		}
+		~Profiler()
+		{
+			EndProfiling(name);
+		}
+	private:
+		const char* name;
+	};
+	constexpr int SAMPLE_SIZE = 20;
+	struct PROFILE_SAMPLE
+	{
+		bool flag;
+		char profileName[64];
+		LARGE_INTEGER startTime;
+		__int64 totalTime;
+		__int64 min[2];
+		__int64 max[2];
+		__int64 callCounts;
+	};
 
 
-void BeginProfiling(const char* name);
-void EndProfiling(const char* name);
-void SaveProfiling();
-void ResetProfiling();
-extern PROFILE_SAMPLE samples[10];
+	extern PROFILE_SAMPLE samples[SAMPLE_SIZE];
 #endif // !__PROFILER_HEADER__
+}
+
