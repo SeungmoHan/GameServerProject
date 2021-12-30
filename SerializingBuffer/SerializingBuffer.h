@@ -1,7 +1,8 @@
 #pragma once
 #ifndef __SERIALIZEING_BUFFER_HEADER__
 #define __SERIALIZEING_BUFFER_HEADER__
-#define __UNIV_DEVELOPER_
+
+#define MSS 1460
 
 namespace univ_dev
 {
@@ -10,7 +11,7 @@ namespace univ_dev
 	public:
 		enum PacketSize
 		{
-			DefaultSize = 1400
+			DefaultSize = MSS
 		};
 		Packet();
 		Packet(int bufferSize);
@@ -20,7 +21,8 @@ namespace univ_dev
 
 		void Clear();
 		int GetBufferSize();
-		char* GetBufferPtr();
+		char* GetReadPtr();
+		char* GetWritePtr();
 
 		int MoveWritePtr(int size);
 		int MoveReadPtr(int size);
@@ -49,16 +51,18 @@ namespace univ_dev
 		//	MoveReadPtr(sizeof(value));
 		//	return *this;
 		//}
+		
 		Packet& operator=(const Packet& other);
 		Packet& operator>>(unsigned char& value);
 		Packet& operator>>(char& value);
 
 		Packet& operator>>(unsigned short& value);
 		Packet& operator>>(short& value);
-		Packet& operator>>(unsigned int& value);
 
+		Packet& operator>>(unsigned int& value);
 		Packet& operator>>(int& value);
 		Packet& operator>>(long& value);
+		Packet& operator>>(unsigned long& value);
 		Packet& operator>>(float& value);
 		Packet& operator>>(double& value);
 		Packet& operator>>(__int64& value);
@@ -70,6 +74,7 @@ namespace univ_dev
 		Packet& operator<<(unsigned int value);
 
 		Packet& operator<<(int value);
+		Packet& operator<<(unsigned long value);
 		Packet& operator<<(long value);
 		Packet& operator<<(float value);
 		Packet& operator<<(__int64 value);

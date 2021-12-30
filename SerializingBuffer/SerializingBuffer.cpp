@@ -2,11 +2,10 @@
 #include "SerializingBuffer.h"
 #include <string>
 
-///__univ_developer_serialize_buffer_
-
 namespace univ_dev
 {
 	Packet::Packet() : begin(new char[PacketSize::DefaultSize]), end(begin + PacketSize::DefaultSize), writePointer(begin), readPointer(begin), bufferSize(PacketSize::DefaultSize) {}
+	//Packet::Packet() : begin((char*)bufferFreeList.Alloc()), end(begin + PacketSize::DefaultSize), writePointer(begin), readPointer(begin), bufferSize(PacketSize::DefaultSize) {}
 
 	Packet::Packet(int bufferSize) : begin(new char[bufferSize]), end(begin + bufferSize), writePointer(begin), readPointer(begin), bufferSize(bufferSize) {}
 
@@ -27,14 +26,18 @@ namespace univ_dev
 
 	int Packet::GetBufferSize()
 	{
-		return end - begin;
+		return writePointer - readPointer;
 	}
 
-	char* Packet::GetBufferPtr()
+	char* Packet::GetWritePtr()
 	{
-		return begin;
+		return writePointer;
 	}
 
+	char* Packet::GetReadPtr()
+	{
+		return readPointer;
+	}
 	int Packet::MoveWritePtr(int size)
 	{
 		if (writePointer + size >= end)
@@ -136,6 +139,18 @@ namespace univ_dev
 			return *this;
 		}
 		unsigned int* tempPtr = (unsigned int*)readPointer;
+		value = *tempPtr;
+		MoveReadPtr(sizeof(value));
+		return *this;
+	}
+	Packet& Packet::operator>>(unsigned long& value)
+	{
+		if (readPointer + sizeof(value) - 1 >= end)
+		{
+			//읽기 불가능
+			return *this;
+		}
+		unsigned long* tempPtr = (unsigned long*)readPointer;
 		value = *tempPtr;
 		MoveReadPtr(sizeof(value));
 		return *this;
@@ -266,7 +281,18 @@ namespace univ_dev
 		MoveWritePtr(sizeof(value));
 		return *this;
 	}
-
+	Packet& Packet::operator<<(unsigned long value)
+	{
+		if (writePointer + (sizeof(value) - 1) >= end)
+		{
+			//저장이 불가능한경우.
+			return *this;
+		}
+		unsigned long* tempPtr = (unsigned long*)writePointer;
+		*tempPtr = value;
+		MoveWritePtr(sizeof(value));
+		return *this;
+	}
 	Packet& Packet::operator<<(long value)
 	{
 		if (writePointer + (sizeof(value) - 1) >= end)
