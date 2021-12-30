@@ -157,7 +157,6 @@ void CreateRoom(DWORD roomNumber, const WCHAR* roomName, WORD roomNameByte);
 ///------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
 ///------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 /// 패킷 프로시져 선언
 /// Packet Procedure Declare
@@ -208,7 +207,6 @@ int main()
 	g_ListenSocket = NetworkInit();
 	if (g_ListenSocket == INVALID_SOCKET)
 	{
-		//printf("SetListenSocket() error \n");
 		return -1;
 	}
 	//printf("Server Open...\n");
@@ -398,16 +396,6 @@ void PacketProcRequireLogin(univ_dev::Session* session, univ_dev::Packet& packet
 	{
 		DisconnectProc(session);
 	}
-
-	//닉네임 넣고나서 SQ에 새로 패킷담아줘야되는데... 그 패킷안에는 1 + 4byte 들어감
-	//5바이트만큼 SQ에 안들어가면 그 클라이언트는 버려야됨 이미 오래전부터 로직수행 불가능상태임.
-	if (session->SQ.GetFreeSize() < df_RES_LOGIN_SIZE)
-	{
-		DisconnectProc(session);
-		return;
-	}
-
-
 	univ_dev::Packet* pSendPacket = g_PacketPool.Alloc();
 	pSendPacket->Clear();
 	MakePacketResponseLogin(*pSendPacket, result, userID);
@@ -891,6 +879,17 @@ void SendUnicast(univ_dev::Session* targetSession, univ_dev::Packet& packet)
 		//printf("SendUnicast Error : Target is nullptr\n");
 		int* ptr = nullptr;
 		*ptr = 10;
+		return;
+	}
+	
+	//패킷의 버퍼사이즈보다 SendRingBuffer의 사이즈가 적다는건... 오래전부터 로직수행 불가능이었다는 의미임
+	//왜냐면 링버퍼 이전에 내송신버퍼 그리고 상대측의 수신버퍼가 가득찼다는 의미기 때문이다.
+	//내가 만약 라이브러리를 구축하는 입장이라면 SendRingBuffer의 사이즈를 늘려줬겠지만
+	//서버입장에서 이유저 한명때문에 다른 유저들의 쾌적한 플레이를 망칠수도있다면...
+	//그건 그냥 걸러내는게 맞음
+	if (targetSession->SQ.GetFreeSize() < packet.GetBufferSize())
+	{
+		DisconnectProc(targetSession);
 		return;
 	}
 	targetSession->SQ.Enqueue(packet.GetReadPtr(), packet.GetBufferSize());
