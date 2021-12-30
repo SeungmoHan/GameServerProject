@@ -4,19 +4,23 @@
 #define __RING_BUFFER_HEADER__
 #define __UNIV_DEVELOPER_
 
+#define CRASH() int*ptr=nullptr;\
+*ptr=100
 
 namespace univ_dev
 {
-#define CRASH() int*ptr=nullptr;\
-*ptr=100
 
 	class RingBuffer
 	{
 	public:
+		struct Buffer
+		{
+			char buffer[10000];
+		};
 		RingBuffer();
 		RingBuffer(int bufferSize);
-
-		bool ReSize(int size);
+		~RingBuffer();
+		//bool ReSize(int size);
 		int GetBufferSize();
 
 		int GetUseSize();
@@ -29,8 +33,8 @@ namespace univ_dev
 		int Dequeue(char* pDest, int size);
 		int Peek(char* pDest, int size);
 
-		void MoveRear(int size);
-		void MoveFront(int size);
+		void MoveWritePtr(int size);
+		void MoveReadPtr(int size);
 
 		void ClearBuffer();
 

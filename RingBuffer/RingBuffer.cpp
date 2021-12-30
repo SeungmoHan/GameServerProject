@@ -1,13 +1,14 @@
 #include "RingBuffer.h"
 #include <cstdlib>
 
-///__univ_developer_ring_buffer_
+///__univ_developer_ring_buffer
 
 namespace univ_dev
 {
 	RingBuffer::RingBuffer() : ringBufferSize(10000)
 	{
 		begin = (char*)malloc(ringBufferSize);
+		//begin = (char*)RBBufferFreeList.Alloc();
 		end = begin + ringBufferSize;
 		readPointer = writePointer = begin;
 	}
@@ -19,32 +20,40 @@ namespace univ_dev
 		readPointer = writePointer = begin;
 	}
 
-	bool RingBuffer::ReSize(int size)
+	RingBuffer::~RingBuffer()
 	{
-		if (GetUseSize() > size) return false;
-		char* temp = (char*)malloc(size);
-		if (temp == nullptr)
-		{
-			int* ptr = nullptr;
-			*ptr = 100;
-		}
-		int peekRet = Peek(temp, GetUseSize());
-		if (GetUseSize() != peekRet)
-		{
-			free(temp);
-			return false;
-		}
-		free(begin);
-		ringBufferSize = size;
-		readPointer = begin = temp;
-		end = begin + size;
-		writePointer = begin + peekRet;
-		return true;
+		delete begin;
 	}
+	//RingBuffer::~RingBuffer()
+	//{
+	//	RBBufferFreeList.Free((RBBuffer*)begin);
+	//}
+	//bool RingBuffer::ReSize(int size)
+	//{
+	//	if (GetUseSize() > size) return false;
+	//	char* temp = (char*)malloc(size);
+	//	if (temp == nullptr)
+	//	{
+	//		int* ptr = nullptr;
+	//		*ptr = 100;
+	//	}
+	//	int peekRet = Peek(temp, GetUseSize());
+	//	if (GetUseSize() != peekRet)
+	//	{
+	//		free(temp);
+	//		return false;
+	//	}
+	//	free(begin);
+	//	ringBufferSize = size;
+	//	readPointer = begin = temp;
+	//	end = begin + size;
+	//	writePointer = begin + peekRet;
+	//	return true;
+	//}
 
 	int RingBuffer::GetBufferSize()
 	{
-		return end - begin - 1;
+		return end - begin;
 	}
 
 	int RingBuffer::GetUseSize()
@@ -57,15 +66,15 @@ namespace univ_dev
 	int RingBuffer::GetFreeSize()
 	{
 		if (writePointer >= readPointer)
-			return (end - writePointer) + (readPointer - begin - 1);
-		return readPointer - writePointer - 1;
+			return (end - writePointer) + (readPointer - begin);
+		return readPointer - writePointer;
 	}
 
 	int RingBuffer::DirectEnqueueSize()
 	{
 		if (writePointer >= readPointer)
-			return end - writePointer - 1;
-		return readPointer - writePointer - 1;
+			return end - writePointer;
+		return readPointer - writePointer;
 	}
 
 	int RingBuffer::DirectDequeueSize()
@@ -88,7 +97,7 @@ namespace univ_dev
 				buffer++;
 				cnt++;
 			}
-			return size;
+			return cnt;
 		}
 		const char* temp = buffer;
 		while (writePointer != end)
@@ -107,8 +116,7 @@ namespace univ_dev
 			cnt++;
 			temp++;
 		}
-
-		return size;
+		return cnt;
 	}
 
 	int RingBuffer::Dequeue(char* pDest, int size)
@@ -124,7 +132,7 @@ namespace univ_dev
 				readPointer++;
 				cnt++;
 			}
-			return size;
+			return cnt;
 		}
 		char* pDestTemp = pDest;
 		while (readPointer != end)
@@ -144,7 +152,7 @@ namespace univ_dev
 			cnt++;
 			pDestTemp++;
 		}
-		return size;
+		return cnt;
 	}
 
 	int RingBuffer::Peek(char* pDest, int size)
@@ -162,7 +170,7 @@ namespace univ_dev
 				cnt++;
 			}
 			readPointer = originReadPointer;
-			return size;
+			return cnt;
 		}
 		char* pDestTemp = pDest;
 		while (readPointer != end)
@@ -181,11 +189,12 @@ namespace univ_dev
 			pDestTemp++;
 		}
 		readPointer = originReadPointer;
-		return size;
+		return cnt;
 	}
 
-	void RingBuffer::MoveRear(int size)
+	void RingBuffer::MoveWritePtr(int size)
 	{
+		if (size < 0) return;
 		writePointer += size;
 		if (writePointer >= end)
 		{
@@ -195,8 +204,9 @@ namespace univ_dev
 	}
 
 
-	void RingBuffer::MoveFront(int size)
+	void RingBuffer::MoveReadPtr(int size)
 	{
+		if (size < 0) return;
 		readPointer += size;
 		if (readPointer >= end)
 		{
