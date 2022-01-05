@@ -1,0 +1,32 @@
+#pragma once
+
+#ifndef __OBJECT_MANAGER__
+#define __OBJECT_MANAGER__
+
+#include "list"
+#include "ObjectInterface"
+
+class ObjectInterface;
+class Player;
+class SceneInterface;
+
+class ObjectManager
+{
+public:
+	void Update();
+	void Render();
+	void Destroy(ObjectInterface* target, bool = false);
+	void CreateObject(int x, int y, ObjectInterface::ObjectType t, bool isPlayerBullet = false, bool win = false);
+	void PushObject(ObjectInterface* newObject);
+	ObjectManager(SceneInterface* currentScene);
+	~ObjectManager();
+	//static ObjectManager* GetInstance();
+
+private:
+	list<ObjectInterface*> objects;
+	list<ObjectInterface*> destroyTargetInNextFrame;
+	SceneInterface* currentScene;
+	//static ObjectManager objectManager;
+};
+
+#endif // !__OBJECT_MANAGER__

@@ -1,0 +1,47 @@
+#pragma once
+
+#ifndef __ENDING_OBJECT__
+#define __ENDING_OBJECT__
+
+#include "ObjectInterface"
+
+class EndingObject : public ObjectInterface
+{
+public:
+	virtual void Update() override;
+	virtual void Render() override;
+	virtual void OnCollision(ObjectInterface* other) {};
+	EndingObject(int x, int y, ObjectInterface::ObjectType t, ObjectManager* m,bool win);
+private:
+	bool win;
+	char endingScene[bufferHeight][bufferWidth] =
+	{
+		"                                                                                ",
+		"                                                                                ",
+		"                                                                                ",
+		"                                                                                ",
+		"            #####      #     #     #  #######                                   ",
+		"           #          # #    ##   ##  #                                         ",
+		"           #   ###   #   #   # # # #  #######                                   ",
+		"           #     #  #######  #  #  #  #                                         ",
+		"            #####   #     #  #     #  #######                                   ",
+		"                                                                                ",
+		"                                                                                ",
+		"                                                                                ",
+		"                        #####  #       #  #######  #####                        ",
+		"                       #     #  #     #   #        #    #                       ",
+		"                       #     #   #   #    #######  #####                        ",
+		"                       #     #    # #     #        #  #                         ",
+		"                        #####      #      #######  #   ##                       ",
+		"                                                                                ",
+		"                                                                                ",
+		"                                                                                ",
+		"                                                                                ",
+		"                        press \"right shift\" to start scene...                   ",
+		"                                                                                ",
+		"                                                                                ",
+	}
+	;
+};
+
+#endif // !__ENDING_OBJECT__

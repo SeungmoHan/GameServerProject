@@ -1,3 +1,0 @@
-Stage1.txt
-Stage2.txt
-Stage3.txt

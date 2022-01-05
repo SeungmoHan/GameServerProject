@@ -1,0 +1,20 @@
+#pragma once
+#ifndef __BULLET__
+#define __BULLET__
+
+#include "ObjectInterface"
+
+class Bullet : public ObjectInterface
+{
+public:
+	Bullet(int x, int y, ObjectInterface::ObjectType type, ObjectManager* m,  bool isPlayerBullet);
+	virtual void OnCollision(ObjectInterface* other) override;
+	bool IsPlayerBullet();
+	virtual void Update() override;
+	virtual void Render() override;
+private:
+	bool isPlayerBullet;
+};
+
+
+#endif // !__BULLET__

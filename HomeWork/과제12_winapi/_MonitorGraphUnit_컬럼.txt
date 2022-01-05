@@ -1,0 +1,82 @@
+# 모니터 클라이언트 컬럼추가
+
+ typedef struct ST_COLUMN_INFO
+ {
+  	ULONG64 u64ServerID;
+	int iType;
+	WCHAR szName[길이];
+
+	// 여기에 Queue 를 추가하여도 됨.
+
+ } stColumnInfo;
+
+ 하나의 모니터링 컬럼에 필요한 데이터는 ServerID, Type, Name, 큐데이터 입니다.
+ CMonitorGraphUnit 클래스는 위 정보와 큐 데이터를 여러개 보관할 수 있어야 합니다.
+
+ = 맴버변수로 아래의 내용이 추가 됩니다.
+
+ int		_iDataColumn; // 본 윈도우의 컬럼 개수
+ CQueue<int>	*_DataArray;  // 여러개의 컬럼이 필요하므로 동적 배열 할당
+ stColumnInfo	*_ColumArray; // 컬럼별 데이터 타입
+
+ % CQueue 는 ColumInfo 에 포함되어도 됨
+
+
+
+
+ = 생성자에는 컬럼의 개수를 입력받아 필요만큼 컬럼정보를 동적 할당 합니다.
+ 
+ CMonitorGraphUnit::CMonitorGraphUnit(.... int iColumnNum);
+ 
+
+ = 생성 후 추가적인 컬럼별 정보를 입력 받을 수 있도록 함수가 제공 되어야 합니다.
+
+ CMonitorGraphUnit::SetDataColumnInfo(int iColIndex, ULONG64 u64ServerID, int iType, WCHAR *szName)
+
+	p1->SetDataColumnInfo(0, ServerID_1, 1);
+	p2->SetDataColumnInfo(0, ServerID_1, 2);
+	p3->SetDataColumnInfo(0, ServerID_2, 1);
+
+	p4->SetDataColumnInfo(0, ServerID_1, 4, L"릴리즈서버");
+	p4->SetDataColumnInfo(1, ServerID_1, 5, L"개판서버");
+	p4->SetDataColumnInfo(2, ServerID_1, 6, L"먹튀서버");
+	p4->SetDataColumnInfo(3, ServerID_1, 7, L"다운스멜서버");
+
+
+ 이와같이 윈도우 생성 후 컬럼별로 지정하여 추가 정보를 셋팅 합니다.
+
+
+ 
+ = 데이터를 입력받는 InsertData 역시 Server, Type, Data 의 정보를 받도록 합니다.
+
+ CMonitorGraphUnit::InsertData(ULONG64 u64ServerID, int iType, int iData)
+
+ 이렇게 3개의 정보를 입력 받으면 자기가 관리중인 컬럼 전체를 확인하여 적합한 큐에 넣습니다.
+
+
+ = WM_PAINT 에서는 멀티라인에 대한 구현을 합니다.
+
+	case WM_PAINT:
+
+		switch ( pThis->_enGraphType )
+		{
+
+		case LINE_SINGLE:
+			pThis->Paint_LineSingle();
+			break;
+
+		case LINE_MULTI:
+			pThis->Paint_LineMulti();   <<< 추가
+			break;
+		}
+
+
+ = 각각의 라인은 눈에 띄도록 색상이 구별 되어야 합니다. 
+   각각의 라인은 이름을 가지고 있으며, 
+   라인별 이름은 해당 윈도우의 우측에 표시 되어야 합니다.
+
+
+ 그러면 됩니다.
+
+
+  

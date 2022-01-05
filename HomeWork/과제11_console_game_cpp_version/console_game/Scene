@@ -1,0 +1,47 @@
+#pragma once
+
+#ifndef __SCENE_INTERFACE__
+#define __SCENE_INTERFACE__
+
+class ObjectManager;
+class Player;
+
+class SceneInterface
+{
+public:
+	virtual ~SceneInterface() {};
+	virtual void Update() = 0;
+protected:
+	ObjectManager* manager;
+};
+
+class SceneTitle : public SceneInterface
+{
+public:
+	SceneTitle();
+	~SceneTitle();
+	virtual void Update() override;
+private:
+};
+
+class SceneGame : public SceneInterface
+{
+public:
+	SceneGame();
+	~SceneGame();
+	virtual void Update() override;
+private:
+	Player* player;
+	int numOfEnemy = 0;
+};
+
+class SceneEnd : public SceneInterface
+{
+public:
+	SceneEnd(bool gameWin);
+	~SceneEnd();
+	virtual void Update() override;
+private:
+};
+
+#endif // !__SCENE_INTERFACE__
