@@ -59,7 +59,9 @@ constexpr int ATTACK3_Y_DISTANCE = 40;
 
 /// global variable
 bool g_ShutDownFlag = false;
+bool g_DummyMode = true;
 bool serverLock = true;
+bool g_SimpleStatusShoing = true;
 std::set<univ_dev::Session*> g_SendOnSessionList;
 std::set<univ_dev::Session*> g_DisconnectSession;
 
@@ -95,6 +97,7 @@ void SectorUpdate(univ_dev::Player* player);
 void AcceptProc();
 void ReadProc(univ_dev::Session* session);
 void SendProc();
+void SendProc(univ_dev::Session* session);
 void DisconnectProc(univ_dev::Session* session);
 void Disconnect();
 void PushSendList(univ_dev::Session* session);
@@ -247,7 +250,7 @@ int main()
 void NetworkIOProcess()
 {
 	g_NetworkIOLoop++;
-	fd_set  rSet;
+	fd_set  rSet,wSet;
 	clock_t prev = clock();
 	clock_t current;
 	bool saveFileFlag = true;
@@ -257,11 +260,13 @@ void NetworkIOProcess()
 	time.tv_sec = 0;
 	time.tv_usec = 0;
 	FD_ZERO(&rSet);
+	//FD_ZERO(&wSet);
 	auto iter = univ_dev::g_SessionMap.begin();
 	while (true)
 	{
 		//univ_dev::Profiler profiler("WHILE_LOOP");
 		FD_ZERO(&rSet);
+		//FD_ZERO(&wSet);
 		//ZeroMemory(currentCheckSession, 63 * sizeof(SOCKET));
 		FD_SET(g_ListenSocket, &rSet);
 		userCount = 0;
@@ -269,6 +274,7 @@ void NetworkIOProcess()
 		{
 			if (iter == univ_dev::g_SessionMap.end()) break;
 			FD_SET(iter->second->sock, &rSet);
+			//FD_SET(iter->second->sock, &wSet);
 			currentCheckSession[userCount] = iter->second->sock;
 			++iter;
 		}
@@ -307,6 +313,8 @@ void NetworkIOProcess()
 			{
 				ReadProc(currentSession);
 			}
+			//if (FD_ISSET(currentSession->sock, &wSet))
+			//	SendProc(currentSession);
 		}
 		if (iter == univ_dev::g_SessionMap.end())break;
 	}
@@ -401,12 +409,13 @@ void PacketProcMoveStart(PacketHeader header, univ_dev::Session* session, univ_d
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos);
+		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n",currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+		x = currentPlayer->xPos;
+		y = currentPlayer->yPos;
+		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
 		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncMoveStart++;
-		x = currentPlayer->xPos;
-		y = currentPlayer->yPos;
 		SendUnicast(session, *pSyncPacket);
 		//SendBroadcastNearby(session, nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
@@ -483,12 +492,13 @@ void PacketProcMoveStop(PacketHeader header, univ_dev::Session* session, univ_de
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos);
+		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+		x = currentPlayer->xPos;
+		y = currentPlayer->yPos;
+		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
 		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncMoveStop++;
-		x = currentPlayer->xPos;
-		y = currentPlayer->yPos;
 		SendUnicast(session, *pSyncPacket);
 		//SendBroadcastNearby(session, nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
@@ -539,12 +549,13 @@ void PacketProcAttack1(PacketHeader header, univ_dev::Session* session, univ_dev
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos);
+		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+		x = currentPlayer->xPos;
+		y = currentPlayer->yPos;
+		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
 		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncAttack1++;
-		x = currentPlayer->xPos;
-		y = currentPlayer->yPos;
 		SendUnicast(session, *pSyncPacket);
 		//SendBroadcastNearby(session,nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
@@ -642,12 +653,13 @@ void PacketProcAttack2(PacketHeader header, univ_dev::Session* session, univ_dev
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos);
+		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+		x = currentPlayer->xPos;
+		y = currentPlayer->yPos;
+		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
 		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncAttack2++;
-		x = currentPlayer->xPos;
-		y = currentPlayer->yPos;
 		SendUnicast(session, *pSyncPacket);
 		//SendBroadcastNearby(session,nullptr , *pSyncPacket);
 		pSyncPacket->Clear();
@@ -744,12 +756,13 @@ void PacketProcAttack3(PacketHeader header, univ_dev::Session* session, univ_dev
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos);
+		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+		x = currentPlayer->xPos;
+		y = currentPlayer->yPos;
+		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
 		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncAttack3++;
-		x = currentPlayer->xPos;
-		y = currentPlayer->yPos;
 		SendUnicast(session, *pSyncPacket);
 		//SendBroadcastNearby(session, nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
@@ -836,10 +849,10 @@ void Update()
 
 bool MoveCheck(short xPos, short yPos)
 {
-	if (xPos >= MAX_MAP_WIDTH) return false;
-	else if (xPos <= MIN_MAP_WIDTH) return false;
-	else if (yPos >= MAX_MAP_HEIGHT) return false;
-	else if (yPos <= MIN_MAP_WIDTH) return false;
+	if (xPos > MAX_MAP_WIDTH) return false;
+	else if (xPos < MIN_MAP_WIDTH) return false;
+	else if (yPos > MAX_MAP_HEIGHT) return false;
+	else if (yPos < MIN_MAP_WIDTH) return false;
 
 	return true;
 }
@@ -853,12 +866,15 @@ void PlayerUpdate(DWORD& deltaTime)
 		for (auto iter = univ_dev::g_PlayerMap.begin(); iter != univ_dev::g_PlayerMap.end(); ++iter)
 		{
 			univ_dev::Player* currentPlayer = iter->second;
-
-			if (currentPlayer->HP <= 0)
+			if (!g_DummyMode)
 			{
-				DisconnectProc(currentPlayer->pSession);
-				continue;
+				if (currentPlayer->HP <= 0)
+				{
+					DisconnectProc(currentPlayer->pSession);
+					continue;
+				}
 			}
+
 
 			if (currentTime - currentPlayer->pSession->lastRecvTime > univ_dev::RECV_TIMEOUT)
 			{
@@ -1196,6 +1212,16 @@ void ControlServer()
 			g_ShutDownFlag = true;
 			printf("ServerOff\n");
 		}
+		else if (toupper(key) == 'D' && !serverLock)
+		{
+			g_DummyMode = !g_DummyMode;
+			g_DummyMode ? printf("Dummy Mode On\n") : printf("Dummy Mode Off\n");
+		}
+		else if (toupper(key) == 'S' && !serverLock)
+		{
+			g_SimpleStatusShoing = g_SimpleStatusShoing;
+			g_SimpleStatusShoing ? printf("Simple Showing Mode On\n") : printf("Simple Showing Mode Off\n");
+		}
 	}
 }
 
@@ -1205,6 +1231,14 @@ void MonitorServerStatus()
 	clock_t now = clock();
 	if (cur - sec > 1000)
 	{
+		if (g_SimpleStatusShoing)
+		{
+			if (update != 25)
+				printf("Update Frame : %d\tIO Frame : %d\tExcute Time : %d\n", update, g_NetworkIOLoop, now / 1000);
+			g_NetworkIOLoop = update = 0;
+			sec = cur;
+			return;
+		}
 		system("cls");
 		g_TotalSyncPacketSend += g_SyncPacketPerSec;
 		printf("-----------------------------------------\n");
@@ -1393,6 +1427,43 @@ void ReadProc(univ_dev::Session* session)
 }
 
 
+void SendProc(univ_dev::Session* session)
+{
+	int useSize = session->SQ.GetUseSize();
+	if (useSize == 0) return;
+	int sendRet = send(session->sock, session->SQ.GetReadPtr(), session->SQ.DirectDequeueSize(), 0);
+
+	int secondSendRet = 0;
+	if (sendRet == SOCKET_ERROR)
+	{
+		int err = WSAGetLastError();
+		if (err != WSAEWOULDBLOCK)
+		{
+			DisconnectProc(session);
+			return;
+		}
+	}
+	if (useSize != sendRet)
+	{
+		secondSendRet = send(session->sock, session->SQ.GetReadPtr(), session->SQ.DirectDequeueSize(), 0);
+		if (secondSendRet == SOCKET_ERROR)
+		{
+			int err = WSAGetLastError();
+			if (err != WSAEWOULDBLOCK)
+			{
+				DisconnectProc(session);
+				return;
+			}
+		}
+	}
+	if (useSize != sendRet + secondSendRet)
+	{
+		DisconnectProc(session);
+		return;
+	}
+	if (session->SQ.GetUseSize() == 0)
+		session->SQ.ClearBuffer();
+}
 
 
 void SendProc()
@@ -1420,7 +1491,7 @@ void SendProc()
 		{
 			secondSendRet = send(currentSession->sock, currentSession->SQ.GetReadPtr(), currentSession->SQ.DirectDequeueSize(), 0);
 			//g_SendPerSec++;
-			if (sendRet == SOCKET_ERROR)
+			if (secondSendRet == SOCKET_ERROR)
 			{
 				int err = WSAGetLastError();
 				if (err != WSAEWOULDBLOCK)
