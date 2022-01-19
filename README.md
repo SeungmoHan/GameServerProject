@@ -1,4 +1,4 @@
-# Univ-Developer_Procademy
+# Univ-Developer
 안녕하세요 대학생개발자입니다.
 
 코드가 무지 스파게티입니다(맛도없습니다)
