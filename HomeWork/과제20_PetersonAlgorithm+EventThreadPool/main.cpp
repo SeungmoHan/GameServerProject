@@ -13,7 +13,7 @@ int turn;
 alignas(64)static volatile int flag0;
 alignas(64)static volatile int flag1;
 
-unsigned __int64 g_Count = 5000000;
+unsigned __int64 g_Count = 50000000;
 
 alignas(64)static volatile unsigned __int64 g_RetCount;
 
@@ -21,6 +21,8 @@ unsigned __int64 g_InterLock_Thread1;
 unsigned __int64 g_InterLock_Thread2;
 
 int g_SetCount = 0;
+
+
 
 unsigned __stdcall Thread1(void* param)
 {
@@ -31,19 +33,18 @@ unsigned __stdcall Thread1(void* param)
 		turn = 0;
 		//std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
 		//_mm_mfence();
-		//_ReadWriteBarrier();
 		//__faststorefence();
 		//_InterlockedOr(&g_InterLock_Thread1, 0);
-		
+		//YieldProcessor();
+		//_ReadWriteBarrier();
 		//int temp = flag1;
 		//flag1 = temp;
+
+		for (int i = 0; i < 50; i++);
 		//while (temp == true && turn == 1)
 		//	YieldProcessor();
-		while (flag1 == true && turn == 0)
-		{
-			YieldProcessor();
-			//printf("deadlock1\n");
-		}
+		while (turn == 0 && flag1 == true);
+			//YieldProcessor();
 		i--;
 		g_RetCount++;
 		flag0 = false;
@@ -59,21 +60,20 @@ unsigned __stdcall Thread2(void* param)
 	{
 		flag1 = true;
 		turn = 1;
-		std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
+		//std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
 		//_mm_mfence();
-		//_ReadWriteBarrier();
 		//__faststorefence();
 		//_InterlockedOr(&g_InterLock_Thread2, 0);
-
+		//YieldProcessor();
+		//_ReadWriteBarrier();
 		//int temp = flag0;
 		//flag0 = temp;
+		for (int i = 0; i < 50; i++);
+
 		//while (temp == true && turn == 1)
 			//YieldProcessor();
-		while (flag0 == true && turn == 1)
-		{
-			YieldProcessor();
-			//printf("deadlock2\n");
-		}
+		while (turn == 1 && flag0 == true);
+			//YieldProcessor();
 		i--;
 		g_RetCount++;
 		flag1 = false;
@@ -117,7 +117,8 @@ void Post()
 
 int main()
 {
-	
+
+
 	g_Event = CreateEvent(nullptr, false, false, nullptr);
 
 	//for (int i = 0; i < 10; i++)
