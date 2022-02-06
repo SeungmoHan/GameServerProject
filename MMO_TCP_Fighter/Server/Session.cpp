@@ -21,7 +21,8 @@ namespace univ_dev
 		newSession->lastRecvTime = timeGetTime();
 		newSession->sessionID = g_SessionID++;
 		newSession->sock = sock;
-
+		newSession->RQ.ClearBuffer();
+		newSession->SQ.ClearBuffer();
 		g_SessionMap.emplace(std::make_pair(sock, newSession));
 		return newSession;
 	}
@@ -35,8 +36,10 @@ namespace univ_dev
 			return;
 		}
 		Session* removeSession = iter->second;
-
+		removeSession->RQ.ClearBuffer();
+		removeSession->SQ.ClearBuffer();
 		closesocket(removeSession->sock);
+
 		g_SessionObjectPool.Free(removeSession);
 
 		g_SessionMap.erase(sock);

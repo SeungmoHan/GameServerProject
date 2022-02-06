@@ -1,7 +1,7 @@
 #pragma comment(lib,"ws2_32.lib")
 #pragma comment(lib,"Winmm.lib")
 
-#define MMO_TCP_FIGHTER_PORT 20000
+#define MMO_TCP_FIGHTER_PORT 11350
 #define MAX_TOLERANCE_DISTANCE 50
 
 #define MAX_MAP_HEIGHT 6400
@@ -90,6 +90,11 @@ void Update();
 void ControlServer();
 void MonitorServerStatus();
 
+void LogSyncInfo(const char* functionName, int functionLine, univ_dev::Player* player, short x, short y);
+void LogDisconnectInfo(const char* functionName, int functionLine, univ_dev::Session* session, const char* reason);
+void LogCriticalError(const char* functionName, int functionLine, const char* reason);
+
+
 void PlayerUpdate(DWORD& deltaTime);
 void SectorUpdate(univ_dev::Player* player);
 
@@ -123,14 +128,76 @@ void PacketProcEcho(PacketHeader header, univ_dev::Session* session, univ_dev::P
 
 void GetNearBySector(univ_dev::Player* player, univ_dev::SectorAround& oldSectorAround, univ_dev::SectorAround& curSectorAround);
 
-
+void LogCriticalError(const char* functionName, int functionLine, const char* reason)
+{
+	time_t unixTime = time(nullptr);
+	tm date;
+	localtime_s(&date, &unixTime);
+	char fileName[100]{ 0 };
+	char tempBuffer[20]{ 0 };
+	_itoa_s(date.tm_year + 1900, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	_itoa_s(date.tm_mon + 1, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	_itoa_s(date.tm_mday, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	strcat_s(fileName, "_log.txt");
+	FILE* file = nullptr;
+	while (file == nullptr)
+		fopen_s(&file, fileName, "ab");
+	fprintf(file, "Critical Error : %s::%d_%s\n", functionName, functionLine, reason);
+	printf("Critical Error : %s::%d_%s\n", functionName, functionLine, reason);
+	fclose(file);
+}
+void LogSyncInfo(const char* functionName, int functionLine, univ_dev::Player* player, short x, short y)
+{
+	time_t unixTime = time(nullptr);
+	tm date;
+	localtime_s(&date, &unixTime);
+	char fileName[100]{ 0 };
+	char tempBuffer[20]{ 0 };
+	_itoa_s(date.tm_year + 1900, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	_itoa_s(date.tm_mon + 1, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	_itoa_s(date.tm_mday, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	strcat_s(fileName, "_log.txt");
+	FILE* file = nullptr;
+	while (file == nullptr)
+		fopen_s(&file, fileName, "ab");
+	fprintf(file, "Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", player->sessionID, player->xPos, player->yPos, x, y);
+	printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", player->sessionID, player->xPos, player->yPos, x, y);
+	fclose(file);
+}
+void LogDisconnectInfo(const char* functionName, int functionLine, univ_dev::Session* session, const char* reason)
+{
+	time_t unixTime = time(nullptr);
+	tm date;
+	localtime_s(&date, &unixTime);
+	char fileName[100]{ 0 };
+	char tempBuffer[20]{ 0 };
+	_itoa_s(date.tm_year + 1900, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	_itoa_s(date.tm_mon + 1, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	_itoa_s(date.tm_mday, tempBuffer, 10);
+	strcat_s(fileName, tempBuffer);
+	strcat_s(fileName, "_log.txt");
+	FILE* file = nullptr;
+	while (file == nullptr)
+		fopen_s(&file, fileName, "ab");
+	fprintf(file, "Disconnect SessionID : %d\n%s::%d_%s\n", session->sessionID, functionName, functionLine, reason);
+	printf("Disconnect SessionID : %d\n%s::%d_%s\n", session->sessionID, functionName, functionLine, reason);
+	fclose(file);
+}
 
 
 void SendUnicast(univ_dev::Session* targetSession, univ_dev::Packet& packet)
 {
 	if (targetSession == nullptr)
 	{
-		//printf("SendUnicast Error : Target is nullptr\n");
+		LogCriticalError(__FUNCTION__, __LINE__, "targetSession is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
@@ -144,6 +211,8 @@ void SendUnicast(univ_dev::Session* targetSession, univ_dev::Packet& packet)
 
 	if (targetSession->SQ.GetFreeSize() < packet.GetBufferSize())
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, targetSession, "Ringbuffer's FreeSize is smaller than Packet's useSize");
+		printf("SQ.FreeSize:%d\tpacket.BufferSize:%d\n", targetSession->SQ.GetFreeSize(), packet.GetBufferSize());
 		DisconnectProc(targetSession);
 		return;
 	}
@@ -151,7 +220,7 @@ void SendUnicast(univ_dev::Session* targetSession, univ_dev::Packet& packet)
 	g_SendPerSec++;
 	PushSendList(targetSession);
 }
-void SendBroadCast(univ_dev::Session* exSession ,univ_dev::Packet& packet)
+void SendBroadCast(univ_dev::Session* exSession, univ_dev::Packet& packet)
 {
 	univ_dev::Session* currentSession;
 	auto iter = univ_dev::g_SessionMap.begin();
@@ -162,10 +231,17 @@ void SendBroadCast(univ_dev::Session* exSession ,univ_dev::Packet& packet)
 		SendUnicast(currentSession, packet);
 	}
 }
-void SendBroadcastNearby(univ_dev::Session* session,univ_dev::Session* exSession, univ_dev::Packet& packet)
+void SendBroadcastNearby(univ_dev::Session* session, univ_dev::Session* exSession, univ_dev::Packet& packet)
 {
 	//최대 섹터9개를 돌면서 모든 유저들에게 보내야됨
 	auto playerIter = univ_dev::g_PlayerMap.find(session->sessionID);
+	if (playerIter == univ_dev::g_PlayerMap.end())
+	{
+		LogCriticalError(__FUNCTION__, __LINE__, "playerIter is g_PlayerMap.end");
+		int* ptr = nullptr;
+		*ptr = 100;
+		return;
+	}
 	univ_dev::Player* player = playerIter->second;
 
 	//보내야 하는 섹터는 (curx - 1 ~ curx +1)(cury - 1 ~ cury + 1)까지 보내야됨
@@ -183,7 +259,7 @@ void SendBroadcastNearby(univ_dev::Session* session,univ_dev::Session* exSession
 		for (int j = 0; j < 3; j++)
 		{
 			//인덱스가 -1이거나 최대값이면 안되니까 그부분은 뛰어넘고
-			if (xIdx <0 || xIdx >= univ_dev::SECTOR_MAX_X)
+			if (xIdx < 0 || xIdx >= univ_dev::SECTOR_MAX_X)
 			{
 				xIdx++;
 				continue;
@@ -215,6 +291,7 @@ void PushSendList(univ_dev::Session* session)
 {
 	if (session == nullptr)
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "session is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 	}
@@ -227,11 +304,17 @@ int main()
 {
 
 	timeBeginPeriod(1);
-	if (!LoadData()) return -1;
-	
+	if (!LoadData())
+	{
+		LogCriticalError(__FUNCTION__, __LINE__, "LoadData failed");
+		return -1;
+	}
 	g_ListenSocket = NetworkInitial();
 	if (g_ListenSocket == INVALID_SOCKET)
+	{
+		LogCriticalError(__FUNCTION__, __LINE__, "NetworkInitial Failed and g_ListenSocket is INVALID_SOCKET");
 		return -2;
+	}
 	srand(time(nullptr));
 	while (!g_ShutDownFlag)
 	{
@@ -250,7 +333,7 @@ int main()
 void NetworkIOProcess()
 {
 	g_NetworkIOLoop++;
-	fd_set  rSet,wSet;
+	fd_set  rSet, wSet;
 	clock_t prev = clock();
 	clock_t current;
 	bool saveFileFlag = true;
@@ -285,7 +368,7 @@ void NetworkIOProcess()
 			int err = WSAGetLastError();
 			if (err != WSAEWOULDBLOCK)
 			{
-				printf("select error was not WOULDBLOCK\n");
+				LogCriticalError(__FUNCTION__, __LINE__, "select, numOfSignaledSocket is SOCKET_ERROR and err is not WSAEWOULDBLOCK");
 				int* ptr = nullptr;
 				*ptr = 100;
 				return;
@@ -304,6 +387,7 @@ void NetworkIOProcess()
 			if (currentSessionIter == univ_dev::g_SessionMap.end())
 			{
 				//문제가 있음
+				LogCriticalError(__FUNCTION__, __LINE__, "currentSessionIter is g_SessionMap.end");
 				int* ptr = nullptr;
 				*ptr = 100;
 				return;
@@ -326,35 +410,41 @@ void PacketProc(PacketHeader header, univ_dev::Session* session, univ_dev::Packe
 {
 	switch (header.packetType)
 	{
-		case dfPACKET_CS_MOVE_START:
-		{
-			PacketProcMoveStart(header, session, packet);
-			break;
-		}
-		case dfPACKET_CS_MOVE_STOP:
-		{
-			PacketProcMoveStop(header, session, packet);
-			break;
-		}
-		case dfPACKET_CS_ATTACK1:
-		{
-			PacketProcAttack1(header, session, packet);
-			break;
-		}
-		case dfPACKET_CS_ATTACK2:
-		{
-			PacketProcAttack2(header, session, packet);
-			break;
-		}
-		case dfPACKET_CS_ATTACK3:
-		{
-			PacketProcAttack3(header, session, packet);
-			break;
-		}
-		case dfPACKET_CS_ECHO:
-		{
-			PacketProcEcho(header, session, packet);
-		}
+	case dfPACKET_CS_MOVE_START:
+	{
+		PacketProcMoveStart(header, session, packet);
+		break;
+	}
+	case dfPACKET_CS_MOVE_STOP:
+	{
+		PacketProcMoveStop(header, session, packet);
+		break;
+	}
+	case dfPACKET_CS_ATTACK1:
+	{
+		PacketProcAttack1(header, session, packet);
+		break;
+	}
+	case dfPACKET_CS_ATTACK2:
+	{
+		PacketProcAttack2(header, session, packet);
+		break;
+	}
+	case dfPACKET_CS_ATTACK3:
+	{
+		PacketProcAttack3(header, session, packet);
+		break;
+	}
+	case dfPACKET_CS_ECHO:
+	{
+		PacketProcEcho(header, session, packet);
+		break;
+	}
+	default:
+	{
+		LogCriticalError(__FUNCTION__, __LINE__, "default case");
+		break;
+	}
 	}
 }
 void PacketProcEcho(PacketHeader header, univ_dev::Session* session, univ_dev::Packet& packet)
@@ -376,23 +466,27 @@ void PacketProcMoveStart(PacketHeader header, univ_dev::Session* session, univ_d
 {
 	if (session == nullptr)
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "session is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
 	}
 	if (header.code != 0x89)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "header code is not 0x89");
 		DisconnectProc(session);
 		return;
 	}
 	if (packet.GetBufferSize() != header.payloadSize)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "packet's use size is not same with header's payloadsize");
 		DisconnectProc(session);
 		return;
 	}
 	auto currentPlayerIter = univ_dev::g_PlayerMap.find(session->sessionID);
 	if (currentPlayerIter == univ_dev::g_PlayerMap.end())
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "currentPlayerIter is g_PlayerMap.end");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
@@ -409,7 +503,9 @@ void PacketProcMoveStart(PacketHeader header, univ_dev::Session* session, univ_d
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n",currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+
+		LogSyncInfo(__FUNCTION__, __LINE__, currentPlayer, x, y);
+
 		x = currentPlayer->xPos;
 		y = currentPlayer->yPos;
 		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
@@ -417,7 +513,6 @@ void PacketProcMoveStart(PacketHeader header, univ_dev::Session* session, univ_d
 		g_SyncPacketPerSec++;
 		g_SyncMoveStart++;
 		SendUnicast(session, *pSyncPacket);
-		//SendBroadcastNearby(session, nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
 		univ_dev::g_PacketObjectPool.Free(pSyncPacket);
 	}
@@ -459,30 +554,33 @@ void PacketProcMoveStop(PacketHeader header, univ_dev::Session* session, univ_de
 {
 	if (session == nullptr)
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "session is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
 	}
 	if (header.code != 0x89)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "header code is not 0x89");
 		DisconnectProc(session);
-
 		return;
 	}
 	if (packet.GetBufferSize() != header.payloadSize)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "packet's use size is not same with header's payloadsize");
 		DisconnectProc(session);
 		return;
 	}
 	auto currentPlayerIter = univ_dev::g_PlayerMap.find(session->sessionID);
 	if (currentPlayerIter == univ_dev::g_PlayerMap.end())
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "currentPlayerIter is g_PlayerMap.end");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
 	}
 	univ_dev::Player* currentPlayer = currentPlayerIter->second;
-	
+
 	BYTE direction;
 	short x;
 	short y;
@@ -492,15 +590,15 @@ void PacketProcMoveStop(PacketHeader header, univ_dev::Session* session, univ_de
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+
+		LogSyncInfo(__FUNCTION__, __LINE__, currentPlayer, x, y);		x = currentPlayer->xPos;
+
 		x = currentPlayer->xPos;
 		y = currentPlayer->yPos;
 		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
-		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncMoveStop++;
 		SendUnicast(session, *pSyncPacket);
-		//SendBroadcastNearby(session, nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
 		univ_dev::g_PacketObjectPool.Free(pSyncPacket);
 	}
@@ -522,17 +620,27 @@ void PacketProcAttack1(PacketHeader header, univ_dev::Session* session, univ_dev
 {
 	if (session == nullptr)
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "session is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
 	}
 	if (header.code != 0x89)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "header code is not 0x89");
 		DisconnectProc(session);
+		return;
+	}
+	if (packet.GetBufferSize() != header.payloadSize)
+	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "packet's use size is not same with header's payloadsize");
+		DisconnectProc(session);
+		return;
 	}
 	auto currentPlayerIter = univ_dev::g_PlayerMap.find(session->sessionID);
 	if (currentPlayerIter == univ_dev::g_PlayerMap.end())
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "currentPlayerIter is g_PlayerMap.end");
 		DisconnectProc(session);
 		return;
 	}
@@ -549,7 +657,9 @@ void PacketProcAttack1(PacketHeader header, univ_dev::Session* session, univ_dev
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+
+		LogSyncInfo(__FUNCTION__, __LINE__, currentPlayer, x, y);
+
 		x = currentPlayer->xPos;
 		y = currentPlayer->yPos;
 		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
@@ -561,7 +671,7 @@ void PacketProcAttack1(PacketHeader header, univ_dev::Session* session, univ_dev
 		pSyncPacket->Clear();
 		univ_dev::g_PacketObjectPool.Free(pSyncPacket);
 	}
-	
+
 	currentPlayer->direction = direction;
 	currentPlayer->moveDirection = 255;
 	currentPlayer->action = 255;
@@ -571,8 +681,8 @@ void PacketProcAttack1(PacketHeader header, univ_dev::Session* session, univ_dev
 	univ_dev::Packet* pAttack1Packet = univ_dev::g_PacketObjectPool.Alloc();
 	pAttack1Packet->Clear();
 	univ_dev::MakePacketPlayerAttack1(*pAttack1Packet, currentPlayer->sessionID, currentPlayer->direction, currentPlayer->xPos, currentPlayer->yPos);
-	SendBroadcastNearby(session,session, *pAttack1Packet);
-	
+	SendBroadcastNearby(session, session, *pAttack1Packet);
+
 	int xIdx = currentPlayer->curSector.x - 1;
 	int yIdx = currentPlayer->curSector.y - 1;
 	for (int i = 0; i < 3; i++)
@@ -609,6 +719,8 @@ void PacketProcAttack1(PacketHeader header, univ_dev::Session* session, univ_dev
 				univ_dev::Packet* hitPacket = univ_dev::g_PacketObjectPool.Alloc();
 				hitPacket->Clear();
 				hitPlayer->HP -= ATTACK1_DAMAGE;
+				if (hitPlayer->HP < 0)
+					hitPlayer->HP = 0;
 				univ_dev::MakePacketPlayerHitDamage(*hitPacket, currentPlayer->sessionID, hitPlayer->sessionID, hitPlayer->HP);
 				SendBroadcastNearby(hitPlayer->pSession, nullptr, *hitPacket);
 				hitPacket->Clear();
@@ -625,18 +737,27 @@ void PacketProcAttack2(PacketHeader header, univ_dev::Session* session, univ_dev
 {
 	if (session == nullptr)
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "session is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
 	}
 	if (header.code != 0x89)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "header code is not 0x89");
+		DisconnectProc(session);
+		return;
+	}
+	if (packet.GetBufferSize() != header.payloadSize)
+	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "packet's use size is not same with header's payloadsize");
 		DisconnectProc(session);
 		return;
 	}
 	auto currentPlayerIter = univ_dev::g_PlayerMap.find(session->sessionID);
 	if (currentPlayerIter == univ_dev::g_PlayerMap.end())
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "currentPlayerIter is g_PlayerMap.end");
 		DisconnectProc(session);
 		return;
 	}
@@ -653,7 +774,9 @@ void PacketProcAttack2(PacketHeader header, univ_dev::Session* session, univ_dev
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+
+		LogSyncInfo(__FUNCTION__, __LINE__, currentPlayer, x, y);
+
 		x = currentPlayer->xPos;
 		y = currentPlayer->yPos;
 		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
@@ -712,6 +835,8 @@ void PacketProcAttack2(PacketHeader header, univ_dev::Session* session, univ_dev
 				univ_dev::Packet* hitPacket = univ_dev::g_PacketObjectPool.Alloc();
 				hitPacket->Clear();
 				hitPlayer->HP -= ATTACK2_DAMAGE;
+				if (hitPlayer->HP < 0)
+					hitPlayer->HP = 0;
 				univ_dev::MakePacketPlayerHitDamage(*hitPacket, currentPlayer->sessionID, hitPlayer->sessionID, hitPlayer->HP);
 				SendBroadcastNearby(hitPlayer->pSession, nullptr, *hitPacket);
 				hitPacket->Clear();
@@ -729,17 +854,27 @@ void PacketProcAttack3(PacketHeader header, univ_dev::Session* session, univ_dev
 {
 	if (session == nullptr)
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "session is nullptr");
 		int* ptr = nullptr;
 		*ptr = 100;
 		return;
 	}
 	if (header.code != 0x89)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "header code is not 0x89");
 		DisconnectProc(session);
+		return;
+	}
+	if (packet.GetBufferSize() != header.payloadSize)
+	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "packet's use size is not same with header's payloadsize");
+		DisconnectProc(session);
+		return;
 	}
 	auto currentPlayerIter = univ_dev::g_PlayerMap.find(session->sessionID);
 	if (currentPlayerIter == univ_dev::g_PlayerMap.end())
 	{
+		LogCriticalError(__FUNCTION__, __LINE__, "currentPlayerIter is g_PlayerMap.end");
 		DisconnectProc(session);
 		return;
 	}
@@ -756,15 +891,15 @@ void PacketProcAttack3(PacketHeader header, univ_dev::Session* session, univ_dev
 	{
 		univ_dev::Packet* pSyncPacket = univ_dev::g_PacketObjectPool.Alloc();
 		pSyncPacket->Clear();
-		printf("Sync Send SessionID : %d\t Server Pos : X %d, Y %d\t Client Pos : X %d, Y %d\n", currentPlayer->sessionID, currentPlayer->xPos, currentPlayer->yPos, x, y);
+
+		LogSyncInfo(__FUNCTION__, __LINE__, currentPlayer, x, y);
+
 		x = currentPlayer->xPos;
 		y = currentPlayer->yPos;
 		univ_dev::MakePacketPositionSync(*pSyncPacket, currentPlayer->sessionID, x, y);
-		//printf("Sync\n");
 		g_SyncPacketPerSec++;
 		g_SyncAttack3++;
 		SendUnicast(session, *pSyncPacket);
-		//SendBroadcastNearby(session, nullptr, *pSyncPacket);
 		pSyncPacket->Clear();
 		univ_dev::g_PacketObjectPool.Free(pSyncPacket);
 	}
@@ -778,7 +913,7 @@ void PacketProcAttack3(PacketHeader header, univ_dev::Session* session, univ_dev
 	univ_dev::Packet* pAttack3Packet = univ_dev::g_PacketObjectPool.Alloc();
 	pAttack3Packet->Clear();
 	univ_dev::MakePacketPlayerAttack3(*pAttack3Packet, currentPlayer->sessionID, currentPlayer->direction, currentPlayer->xPos, currentPlayer->yPos);
-	SendBroadcastNearby(session,session, *pAttack3Packet);
+	SendBroadcastNearby(session, session, *pAttack3Packet);
 	// 여기까지 공격 해라는 판정이고 맞았으면 맞았다에대한 판정도 해줘야됨
 	int xIdx = currentPlayer->curSector.x - 1;
 	int yIdx = currentPlayer->curSector.y - 1;
@@ -816,6 +951,8 @@ void PacketProcAttack3(PacketHeader header, univ_dev::Session* session, univ_dev
 				univ_dev::Packet* hitPacket = univ_dev::g_PacketObjectPool.Alloc();
 				hitPacket->Clear();
 				hitPlayer->HP -= ATTACK3_DAMAGE;
+				if (hitPlayer->HP < 0)
+					hitPlayer->HP = 0;
 				univ_dev::MakePacketPlayerHitDamage(*hitPacket, currentPlayer->sessionID, hitPlayer->sessionID, hitPlayer->HP);
 				SendBroadcastNearby(hitPlayer->pSession, nullptr, *hitPacket);
 				hitPacket->Clear();
@@ -841,7 +978,7 @@ void Update()
 	cur = timeGetTime();
 	deltaTime += cur - old;
 	old = cur;
-	
+
 	if (deltaTime < 40) return;
 	update++;
 	PlayerUpdate(deltaTime);
@@ -870,14 +1007,14 @@ void PlayerUpdate(DWORD& deltaTime)
 			{
 				if (currentPlayer->HP <= 0)
 				{
+					LogDisconnectInfo(__FUNCTION__, __LINE__, currentPlayer->pSession, "currentPlayer's HP is zero");
 					DisconnectProc(currentPlayer->pSession);
 					continue;
 				}
 			}
-
-
 			if (currentTime - currentPlayer->pSession->lastRecvTime > univ_dev::RECV_TIMEOUT)
 			{
+				LogDisconnectInfo(__FUNCTION__, __LINE__, currentPlayer->pSession, "RECV_TIMEOUT");
 				DisconnectProc(currentPlayer->pSession);
 				continue;
 			}
@@ -1004,8 +1141,8 @@ void SectorUpdate(univ_dev::Player* player)
 	if (player->curSector.y < 0)
 		player->curSector.y = 0;
 
-	
-	if(player->curSector.x != player->oldSector.x || player->curSector.y != player->oldSector.y)
+
+	if (player->curSector.x != player->oldSector.x || player->curSector.y != player->oldSector.y)
 		sectorChanged = true;
 
 	if (sectorChanged)
@@ -1017,7 +1154,7 @@ void SectorUpdate(univ_dev::Player* player)
 
 		// 여기서 넣어야 되는 섹터 주변에 다 넣고
 		// 빼야되는 섹터 주변에 다 빼야됨.
-		
+
 		univ_dev::SectorAround removeSectorAround;
 		univ_dev::SectorAround addSectorAround;
 		removeSectorAround.sectorCount = addSectorAround.sectorCount = 0;
@@ -1138,7 +1275,7 @@ void GetNearBySector(univ_dev::Player* player, univ_dev::SectorAround& oldSector
 		}
 		for (int j = 0; j < 3; j++)
 		{
-			if (oldBeginSectorX < 0  || oldBeginSectorX >= univ_dev::SECTOR_MAX_X )
+			if (oldBeginSectorX < 0 || oldBeginSectorX >= univ_dev::SECTOR_MAX_X)
 			{
 				oldBeginSectorX++;
 				continue;
@@ -1161,7 +1298,7 @@ void GetNearBySector(univ_dev::Player* player, univ_dev::SectorAround& oldSector
 		}
 		for (int j = 0; j < 3; j++)
 		{
-			if (curBeginSectorX < 0  || curBeginSectorX >= univ_dev::SECTOR_MAX_X )
+			if (curBeginSectorX < 0 || curBeginSectorX >= univ_dev::SECTOR_MAX_X)
 			{
 				curBeginSectorX++;
 				continue;
@@ -1231,43 +1368,60 @@ void MonitorServerStatus()
 	clock_t now = clock();
 	if (cur - sec > 1000)
 	{
-		if (g_SimpleStatusShoing)
+		if (update < 25)
 		{
-			if (update != 25)
+			time_t unixTime = time(nullptr);
+			tm date;
+			localtime_s(&date, &unixTime);
+			char fileName[100]{ 0 };
+			char tempBuffer[20]{ 0 };
+			_itoa_s(date.tm_year + 1900, tempBuffer, 10);
+			strcat_s(fileName, tempBuffer);
+			_itoa_s(date.tm_mon + 1, tempBuffer, 10);
+			strcat_s(fileName, tempBuffer);
+			_itoa_s(date.tm_mday, tempBuffer, 10);
+			strcat_s(fileName, tempBuffer);
+			strcat_s(fileName, "_log.txt");
+			FILE* file = nullptr;
+			while (file == nullptr)
+				fopen_s(&file, fileName, "ab");
+			fprintf(file, "Update Frame : %d\tIO Frame : %d\tExcute Time : %d\n", update, g_NetworkIOLoop, now / 1000);
+			fclose(file);
+			if (g_SimpleStatusShoing)
 				printf("Update Frame : %d\tIO Frame : %d\tExcute Time : %d\n", update, g_NetworkIOLoop, now / 1000);
-			g_NetworkIOLoop = update = 0;
-			sec = cur;
-			return;
 		}
-		system("cls");
-		g_TotalSyncPacketSend += g_SyncPacketPerSec;
-		printf("-----------------------------------------\n");
-		printf("EXECUTE_TIME : %u sec\n", now / 1000);
-		printf("CUR - SEC : %u\n", cur - sec);
-		printf("%d_UPDATE_CALLED \n", update);
-		if (serverLock) printf("SERVER_LOCKED\n");
-		else printf("SERVER_UNLOCKED\n");
-		printf("NET_IO_PER_SEC : %d\n", g_NetworkIOLoop);
-		printf("RECV_PER_SEC : %d\n", g_RecvPerSec);
-		printf("SEND_PER_SEC : %d\n", g_SendPerSec);
-		printf("SYNC_PACKET_SEND_PER_SEC : %d\n", g_SyncPacketPerSec);
-		printf("TOTAL_SYNC_PACKET_SEND : %llu\n", g_TotalSyncPacketSend);
-		printf("SYNC_MOVE_START : %d\n", g_SyncMoveStart);
-		printf("SYNC_MOVE_STOP : %d\n", g_SyncMoveStop);
-		printf("SYNC_ATTACK1 : %d\n", g_SyncAttack1);
-		printf("SYNC_ATTACK2 : %d\n", g_SyncAttack2);
-		printf("SYNC_ATTACK3 : %d\n", g_SyncAttack3);
-		
-		printf("\nMEMORY OBJECT POOL\n");
-		printf("PLAYER_POOL_CAPACITY : %d\n", univ_dev::g_PlayerObjectPool.GetCapacityCount());
-		printf("PLAYER_POOL_USE_COUNT : %d\n", univ_dev::g_PlayerObjectPool.GetUseCount());
-		printf("SESSION_POOL_CAPACITY : %d\n", univ_dev::g_SessionObjectPool.GetCapacityCount());
-		printf("SESSION_POOL_USE_COUNT : %d\n", univ_dev::g_SessionObjectPool.GetUseCount());
-		printf("PACKET_POOL_CAPACITY : %d\n", univ_dev::g_PacketObjectPool.GetCapacityCount());
-		printf("PACKET_POOL_USE_COUNT : %d\n", univ_dev::g_PacketObjectPool.GetUseCount());
-		g_SendPerSec = g_RecvPerSec = g_SyncPacketPerSec =g_NetworkIOLoop = 0;
-		printf("-----------------------------------------\n\n");
-		update = 0;
+		if (!g_SimpleStatusShoing)
+		{
+			system("cls");
+			g_TotalSyncPacketSend += g_SyncPacketPerSec;
+			printf("-----------------------------------------\n");
+			printf("EXECUTE_TIME : %u sec\n", now / 1000);
+			printf("CUR - SEC : %u\n", cur - sec);
+			printf("%d_UPDATE_CALLED \n", update);
+			if (serverLock) printf("SERVER_LOCKED\n");
+			else printf("SERVER_UNLOCKED\n");
+			printf("NET_IO_PER_SEC : %d\n", g_NetworkIOLoop);
+			printf("RECV_PER_SEC : %d\n", g_RecvPerSec);
+			printf("SEND_PER_SEC : %d\n", g_SendPerSec);
+			printf("SYNC_PACKET_SEND_PER_SEC : %d\n", g_SyncPacketPerSec);
+			printf("TOTAL_SYNC_PACKET_SEND : %llu\n", g_TotalSyncPacketSend);
+			printf("SYNC_MOVE_START : %d\n", g_SyncMoveStart);
+			printf("SYNC_MOVE_STOP : %d\n", g_SyncMoveStop);
+			printf("SYNC_ATTACK1 : %d\n", g_SyncAttack1);
+			printf("SYNC_ATTACK2 : %d\n", g_SyncAttack2);
+			printf("SYNC_ATTACK3 : %d\n", g_SyncAttack3);
+
+			printf("\nMEMORY OBJECT POOL\n");
+			printf("PLAYER_POOL_CAPACITY : %d\n", univ_dev::g_PlayerObjectPool.GetCapacityCount());
+			printf("PLAYER_POOL_USE_COUNT : %d\n", univ_dev::g_PlayerObjectPool.GetUseCount());
+			printf("SESSION_POOL_CAPACITY : %d\n", univ_dev::g_SessionObjectPool.GetCapacityCount());
+			printf("SESSION_POOL_USE_COUNT : %d\n", univ_dev::g_SessionObjectPool.GetUseCount());
+			printf("PACKET_POOL_CAPACITY : %d\n", univ_dev::g_PacketObjectPool.GetCapacityCount());
+			printf("PACKET_POOL_USE_COUNT : %d\n", univ_dev::g_PacketObjectPool.GetUseCount());
+			g_SendPerSec = g_RecvPerSec = g_SyncPacketPerSec = g_NetworkIOLoop = 0;
+			printf("-----------------------------------------\n\n");
+		}
+		g_NetworkIOLoop = update = 0;
 		sec = cur;
 	}
 }
@@ -1322,7 +1476,7 @@ void AcceptProc()
 	univ_dev::Session* newSession = univ_dev::CreateSession(sock);
 	univ_dev::Player* newPlayer = univ_dev::CreatePlayer(newSession);
 
-	
+
 	AddSector(newPlayer);
 
 	univ_dev::Packet* pPacket = univ_dev::g_PacketObjectPool.Alloc();
@@ -1330,7 +1484,7 @@ void AcceptProc()
 	pPacket->Clear();
 	pCreateOtherPacket->Clear();
 	univ_dev::MakePacketCreateNewPlayer(*pPacket, newPlayer->sessionID, newPlayer->moveDirection, newPlayer->xPos, newPlayer->yPos, newPlayer->HP);
-	
+
 	int xIdx = newPlayer->curSector.x - 1;
 	int yIdx = newPlayer->curSector.y - 1;
 	for (int i = 0; i < 3; i++)
@@ -1356,11 +1510,13 @@ void AcceptProc()
 				SendUnicast(newSession, *pCreateOtherPacket);
 				pCreateOtherPacket->Clear();
 			}
+			xIdx++;
 		}
+		yIdx++;
 	}
 
 	SendUnicast(newSession, *pPacket);
-	
+
 	univ_dev::Packet* pBroadcastPacket = univ_dev::g_PacketObjectPool.Alloc();
 	pBroadcastPacket->Clear();
 	univ_dev::MakePacketCreatePlayer(*pBroadcastPacket, newPlayer->sessionID, newPlayer->moveDirection, newPlayer->xPos, newPlayer->yPos, newPlayer->HP);
@@ -1389,6 +1545,8 @@ void ReadProc(univ_dev::Session* session)
 		if (err != WSAEWOULDBLOCK)
 		{
 			//진짜문제있음.
+			if (err != 10054)
+				LogCriticalError(__FUNCTION__, __LINE__, "recvBytes is SOCKET_ERROR and err is not WSAEWOULDBLOCK OR 10054");
 			DisconnectProc(session);
 			return;
 		}
@@ -1405,6 +1563,7 @@ void ReadProc(univ_dev::Session* session)
 		if (header.code != 0x89)
 		{
 			//잘못된 클라이언트는 삭제해버려야지
+			LogDisconnectInfo(__FUNCTION__, __LINE__, session, "Header code is not 0x89");
 			DisconnectProc(session);
 			return;
 		}
@@ -1439,6 +1598,8 @@ void SendProc(univ_dev::Session* session)
 		int err = WSAGetLastError();
 		if (err != WSAEWOULDBLOCK)
 		{
+			if (err != 10054)
+				LogDisconnectInfo(__FUNCTION__, __LINE__, session, "sendRet1 is SOCKET_ERROR and err is not WSAEWOULDBLOCK or 10054");
 			DisconnectProc(session);
 			return;
 		}
@@ -1451,6 +1612,8 @@ void SendProc(univ_dev::Session* session)
 			int err = WSAGetLastError();
 			if (err != WSAEWOULDBLOCK)
 			{
+				if (err != 10054)
+					LogDisconnectInfo(__FUNCTION__, __LINE__, session, "sendRet2 is SOCKET_ERROR and err is not WSAEWOULDBLOCK or 10054");
 				DisconnectProc(session);
 				return;
 			}
@@ -1458,6 +1621,7 @@ void SendProc(univ_dev::Session* session)
 	}
 	if (useSize != sendRet + secondSendRet)
 	{
+		LogDisconnectInfo(__FUNCTION__, __LINE__, session, "useSize is not same with sendRet1 + sendRet2");
 		DisconnectProc(session);
 		return;
 	}
@@ -1482,6 +1646,8 @@ void SendProc()
 			int err = WSAGetLastError();
 			if (err != WSAEWOULDBLOCK)
 			{
+				if (err != 10054)
+					LogDisconnectInfo(__FUNCTION__, __LINE__, currentSession, "sendRet1 is SOCKET_ERROR and err is not WSAEWOULDBLOCK or 10054");
 				DisconnectProc(currentSession);
 				continue;
 			}
@@ -1496,6 +1662,8 @@ void SendProc()
 				int err = WSAGetLastError();
 				if (err != WSAEWOULDBLOCK)
 				{
+					if (err != 10054)
+						LogDisconnectInfo(__FUNCTION__, __LINE__, currentSession, "sendRet2 is SOCKET_ERROR and err is not WSAEWOULDBLOCK or 10054");
 					DisconnectProc(currentSession);
 					continue;
 				}
@@ -1503,6 +1671,7 @@ void SendProc()
 		}
 		if (useSize != sendRet + secondSendRet)
 		{
+			LogDisconnectInfo(__FUNCTION__, __LINE__, currentSession, "useSize is not same with sendRet1 + sendRet2");
 			DisconnectProc(currentSession);
 			continue;
 		}

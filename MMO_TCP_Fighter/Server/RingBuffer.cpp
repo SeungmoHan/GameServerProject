@@ -1,14 +1,13 @@
 #include "RingBuffer.h"
 #include <cstdlib>
-
+#include <algorithm>
 ///__univ_developer_ring_buffer
 
 namespace univ_dev
 {
-	RingBuffer::RingBuffer() : ringBufferSize(10000)
+	RingBuffer::RingBuffer() : ringBufferSize(20000)
 	{
 		begin = (char*)malloc(ringBufferSize);
-		//begin = (char*)RBBufferFreeList.Alloc();
 		end = begin + ringBufferSize;
 		readPointer = writePointer = begin;
 	}
@@ -22,38 +21,11 @@ namespace univ_dev
 
 	RingBuffer::~RingBuffer()
 	{
-		delete begin;
+		free(begin);
 	}
-	//RingBuffer::~RingBuffer()
-	//{
-	//	RBBufferFreeList.Free((RBBuffer*)begin);
-	//}
-	//bool RingBuffer::ReSize(int size)
-	//{
-	//	if (GetUseSize() > size) return false;
-	//	char* temp = (char*)malloc(size);
-	//	if (temp == nullptr)
-	//	{
-	//		int* ptr = nullptr;
-	//		*ptr = 100;
-	//	}
-	//	int peekRet = Peek(temp, GetUseSize());
-	//	if (GetUseSize() != peekRet)
-	//	{
-	//		free(temp);
-	//		return false;
-	//	}
-	//	free(begin);
-	//	ringBufferSize = size;
-	//	readPointer = begin = temp;
-	//	end = begin + size;
-	//	writePointer = begin + peekRet;
-	//	return true;
-	//}
-
 	int RingBuffer::GetBufferSize()
 	{
-		return (int)(end - begin);
+		return (int)(end - begin - 1);
 	}
 
 	int RingBuffer::GetUseSize()
@@ -62,19 +34,18 @@ namespace univ_dev
 			return (int)(writePointer - readPointer);
 		return (int)(writePointer - begin) + (int)(end - readPointer);
 	}
-
 	int RingBuffer::GetFreeSize()
 	{
 		if (writePointer >= readPointer)
-			return (int)(end - writePointer) + (int)(readPointer - begin);
-		return (int)(readPointer - writePointer);
+			return (int)(end - writePointer) + (int)(readPointer - begin) - 1;
+		return (int)(readPointer - writePointer) - 1;
 	}
 
 	int RingBuffer::DirectEnqueueSize()
 	{
 		if (writePointer >= readPointer)
 			return (int)(end - writePointer);
-		return (int)(readPointer - writePointer);
+		return (int)(readPointer - writePointer) - 1;
 	}
 
 	int RingBuffer::DirectDequeueSize()
@@ -97,6 +68,7 @@ namespace univ_dev
 				buffer++;
 				cnt++;
 			}
+			MoveWritePtr(0);
 			return cnt;
 		}
 		const char* temp = buffer;
@@ -132,6 +104,7 @@ namespace univ_dev
 				readPointer++;
 				cnt++;
 			}
+			MoveReadPtr(0);
 			return cnt;
 		}
 		char* pDestTemp = pDest;

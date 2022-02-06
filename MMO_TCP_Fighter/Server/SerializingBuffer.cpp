@@ -6,7 +6,6 @@ namespace univ_dev
 {
 	ObjectFreeList<Packet> g_PacketObjectPool;
 	Packet::Packet() : begin(new char[PacketSize::DefaultSize]), end(begin + PacketSize::DefaultSize), writePointer(begin), readPointer(begin), bufferSize(PacketSize::DefaultSize) {}
-	//Packet::Packet() : begin((char*)bufferFreeList.Alloc()), end(begin + PacketSize::DefaultSize), writePointer(begin), readPointer(begin), bufferSize(PacketSize::DefaultSize) {}
 
 	Packet::Packet(int bufferSize) : begin(new char[bufferSize]), end(begin + bufferSize), writePointer(begin), readPointer(begin), bufferSize(bufferSize) {}
 
@@ -18,6 +17,7 @@ namespace univ_dev
 	void Packet::Release()
 	{
 		delete[] begin;
+		writePointer = begin = end = readPointer = nullptr;
 	}
 
 	void Packet::Clear()
@@ -43,8 +43,8 @@ namespace univ_dev
 	{
 		if (writePointer + size >= end)
 		{
-			writePointer = end - 1;
-			return end - writePointer;
+			writePointer = end;
+			return size - (end - writePointer);
 		}
 		writePointer += size;
 		return size;
@@ -54,8 +54,8 @@ namespace univ_dev
 	{
 		if (readPointer + size >= end)
 		{
-			readPointer = end - 1;
-			return end - readPointer;
+			readPointer = end;
+			return size - (end - readPointer);
 		}
 		readPointer += size;
 		return size;

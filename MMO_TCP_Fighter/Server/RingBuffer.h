@@ -7,14 +7,9 @@
 
 namespace univ_dev
 {
-
 	class RingBuffer
 	{
 	public:
-		struct Buffer
-		{
-			char buffer[10000];
-		};
 		RingBuffer();
 		RingBuffer(int bufferSize);
 		~RingBuffer();
@@ -48,7 +43,11 @@ namespace univ_dev
 	};
 }
 
-
-
-
 #endif
+
+
+
+
+
+
+
