@@ -1,20 +1,21 @@
 #pragma once
-#pragma once
 #ifndef __RING_BUFFER_HEADER__
 #define __RING_BUFFER_HEADER__
+#define __UNIV_DEVELOPER_
+#include <Windows.h>
+#define CRASH() int*ptr=nullptr;\
+*ptr=100
 
 namespace univ_dev
 {
-#define CRASH() int*ptr=nullptr;\
-*ptr=100
 
 	class RingBuffer
 	{
 	public:
 		RingBuffer();
 		RingBuffer(int bufferSize);
-
-		bool ReSize(int size);
+		~RingBuffer();
+		//bool ReSize(int size);
 		int GetBufferSize();
 
 		int GetUseSize();
@@ -27,27 +28,30 @@ namespace univ_dev
 		int Dequeue(char* pDest, int size);
 		int Peek(char* pDest, int size);
 
-		void MoveRear(int size);
-		void MoveFront(int size);
-		void MoveRearBegin();
-		void MoveFrontBegin();
+		void MoveWritePtr(int size);
+		void MoveReadPtr(int size);
 
 		void ClearBuffer();
-
+		int GetReadPtrPosition() { return readPointer - begin; }
+		int GetWritePtrPosition() { return writePointer - begin; }
 		char* GetWritePtr();
 		char* GetReadPtr();
 
-		char* GetBegin() { return begin; }
-		char* GetEnd() { return end; }
+		void Lock(bool shared = false);
+		void Unlock(bool shared = false);
+
 	private:
+		void MoveTempPtr(int size, char** tempPtr);
 		char* begin;
 		char* end;
 		char* readPointer;
 		char* writePointer;
+		SRWLOCK lock;
 
 		int ringBufferSize;
 	};
 }
+
 
 
 

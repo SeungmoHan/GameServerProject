@@ -2,11 +2,13 @@
 #ifndef __RING_BUFFER_HEADER__
 #define __RING_BUFFER_HEADER__
 #define __UNIV_DEVELOPER_
-
-
+#include <Windows.h>
+#define CRASH() int*ptr=nullptr;\
+*ptr=100
 
 namespace univ_dev
 {
+
 	class RingBuffer
 	{
 	public:
@@ -30,24 +32,27 @@ namespace univ_dev
 		void MoveReadPtr(int size);
 
 		void ClearBuffer();
-
+		int GetReadPtrPosition() { return readPointer - begin; }
+		int GetWritePtrPosition() { return writePointer - begin; }
 		char* GetWritePtr();
 		char* GetReadPtr();
+
+		void Lock(bool shared = false);
+		void Unlock(bool shared = false);
+
 	private:
+		void MoveTempPtr(int size, char** tempPtr);
 		char* begin;
 		char* end;
 		char* readPointer;
 		char* writePointer;
+		SRWLOCK lock;
 
 		int ringBufferSize;
 	};
 }
 
+
+
+
 #endif
-
-
-
-
-
-
-
