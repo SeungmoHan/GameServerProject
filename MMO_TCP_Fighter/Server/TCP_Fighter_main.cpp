@@ -1356,7 +1356,7 @@ void ControlServer()
 		}
 		else if (toupper(key) == 'S' && !serverLock)
 		{
-			g_SimpleStatusShoing = g_SimpleStatusShoing;
+			g_SimpleStatusShoing = !g_SimpleStatusShoing;
 			g_SimpleStatusShoing ? printf("Simple Showing Mode On\n") : printf("Simple Showing Mode Off\n");
 		}
 	}
