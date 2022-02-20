@@ -27,34 +27,34 @@ namespace univ_dev
 	}
 	int RingBuffer::GetBufferSize()
 	{
-		return (int)(end - begin - 1);
+		return (end - begin - 1);
 	}
 
 	int RingBuffer::GetUseSize()
 	{
 		if (writePointer >= readPointer)
-			return std::abs((int)(writePointer - readPointer));
-		return std::abs((int)(writePointer - begin) + (int)(end - readPointer));
+			return (writePointer - readPointer);
+		return (writePointer - begin) + (end - readPointer);
 	}
 	int RingBuffer::GetFreeSize()
 	{
 		if (writePointer >= readPointer)
-			return std::abs((int)(end - writePointer) + (int)(readPointer - begin) - 1);
-		return std::abs((int)(readPointer - writePointer) - 1);
+			return (end - writePointer) + (readPointer - begin) - 1;
+		return (readPointer - writePointer) - 1;
 	}
 
 	int RingBuffer::DirectEnqueueSize()
 	{
 		if (writePointer >= readPointer)
-			return std::abs((int)(end - writePointer));
-		return std::abs((int)(readPointer - writePointer) - 1);
+			return (end - writePointer);
+		return (readPointer - writePointer) - 1;
 	}
 
 	int RingBuffer::DirectDequeueSize()
 	{
 		if (writePointer >= readPointer)
-			return std::abs((int)(writePointer - readPointer));
-		return std::abs((int)(end - readPointer));
+			return (writePointer - readPointer);
+		return (end - readPointer);
 	}
 
 	int RingBuffer::Enqueue(const char* pSrc, int size)
@@ -62,7 +62,7 @@ namespace univ_dev
 		int freeSize = GetFreeSize();
 		int writePointerPos = GetWritePtrPosition();
 		int readPointerPos = GetReadPtrPosition();
-		if (freeSize < size) return 0;
+		if (GetFreeSize() < size) return 0;
 		int cnt = 0;
 		char* tempWritePtr = writePointer;
 		while (cnt < size)
@@ -74,7 +74,6 @@ namespace univ_dev
 		}
 		MoveWritePtr(cnt);
 		return cnt;
-
 	}
 
 	int RingBuffer::Dequeue(char* pDest, int size)
@@ -82,7 +81,7 @@ namespace univ_dev
 		int useSize = GetUseSize();
 		int writePointerPos = GetWritePtrPosition();
 		int readPointerPos = GetReadPtrPosition();
-		if (useSize < size) return 0;
+		if (GetUseSize() < size) return 0;
 		int cnt = 0;
 		char* tempReadPtr = readPointer;
 		while (cnt < size)
@@ -99,49 +98,29 @@ namespace univ_dev
 
 	int RingBuffer::Peek(char* pDest, int size)
 	{
-		if (GetUseSize() < size)
-		{
-			return 0;
-		}
+		int useSize = GetUseSize();
+		int writePointerPos = GetWritePtrPosition();
+		int readPointerPos = GetReadPtrPosition();
+		if (GetUseSize() < size) return 0;
 		int cnt = 0;
-		char* tempReadPointer = readPointer;
-		if (DirectDequeueSize() >= size)
-		{
-			while (tempReadPointer != end && cnt < size)
-			{
-				*pDest = *tempReadPointer;
-				pDest++;
-				tempReadPointer++;
-				cnt++;
-			}
-			return cnt;
-		}
-		char* pDestTemp = pDest;
-		while (tempReadPointer != end)
-		{
-			*pDestTemp = *tempReadPointer;
-			tempReadPointer++;
-			cnt++;
-			pDestTemp++;
-		}
-		tempReadPointer = begin;
+		char* tempReadPtr = readPointer;
 		while (cnt < size)
 		{
-			*pDestTemp = *tempReadPointer;
-			tempReadPointer++;
+			*pDest = *tempReadPtr;
+			MoveTempPtr(1, &tempReadPtr);
+			pDest++;
 			cnt++;
-			pDestTemp++;
 		}
 		return cnt;
 	}
 
 	void RingBuffer::MoveWritePtr(int size)
 	{
-		if (size < 0 || size > GetFreeSize()) return;
+		if (size < 0) return;
 		char* newWritePointer = writePointer + size;
 		if (newWritePointer >= end)
 		{
-			int overFlow = (int)(newWritePointer - end);
+			int overFlow = (newWritePointer - end);
 			writePointer = begin + overFlow;
 			return;
 		}
@@ -151,11 +130,11 @@ namespace univ_dev
 
 	void RingBuffer::MoveReadPtr(int size)
 	{
-		if (size < 0 || size > GetUseSize()) return;
+		if (size < 0) return;
 		char* newReadPointer = readPointer + size;
 		if (newReadPointer >= end)
 		{
-			int overFlow = (int)(newReadPointer - end);
+			int overFlow = (newReadPointer - end);
 			readPointer = begin + overFlow;
 			return;
 		}
@@ -166,7 +145,6 @@ namespace univ_dev
 	{
 		readPointer = writePointer = begin;
 	}
-
 	char* RingBuffer::GetWritePtr()
 	{
 		return writePointer;
@@ -197,6 +175,4 @@ namespace univ_dev
 			return;
 		}
 	}
-
-
 }
