@@ -1,0 +1,10 @@
+주의사항
+
+RECV, SEND IO가 동시에 물려있는 상황에서 상대가 연결종료를 했을경우
+RECV로 걸려있는 GQCS가 먼저 떨어질것.
+떨어지면 closesocket + ReleaseSession을 할텐데.
+그렇게 된다면 SEND로 걸려있는 GQCS가 떨어지면서 Session을 건드렸을 경우 문제가생김
+SEND와 RECV를 할때 io count를 증가시키고
+GQCS가 리턴되면 io count를 감소시킨다.
+
+io count가 0이되는 순간 ReleaseSession해준다
