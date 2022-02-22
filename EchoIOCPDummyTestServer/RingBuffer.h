@@ -36,7 +36,8 @@ namespace univ_dev
 		int GetWritePtrPosition() { return writePointer - begin; }
 		char* GetWritePtr();
 		char* GetReadPtr();
-
+		char* GetBeginPtr();
+		char* GetEndPtr();
 		void Lock(bool shared = false);
 		void Unlock(bool shared = false);
 

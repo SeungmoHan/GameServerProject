@@ -155,6 +155,16 @@ namespace univ_dev
 		return readPointer;
 	}
 
+	char* RingBuffer::GetBeginPtr()
+	{
+		return begin;
+	}
+
+	char* RingBuffer::GetEndPtr()
+	{
+		return end;
+	}
+
 	void RingBuffer::Lock(bool shared)
 	{
 		return shared ? AcquireSRWLockShared(&lock) : AcquireSRWLockExclusive(&lock);
