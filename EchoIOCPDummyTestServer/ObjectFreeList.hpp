@@ -5,6 +5,10 @@
 #include <cstdlib>
 #include <new>
 #include <stdio.h>
+#include <synchapi.h>
+
+
+
 namespace univ_dev
 {
 #define CRASH() do{int*ptr =nullptr; *ptr =100;}while(0)
@@ -26,6 +30,7 @@ namespace univ_dev
 		//생성자 그냥 alloc을 n번 호출한것과 동일한효과 그 이후에 추가되는것도 free list처럼
 		ObjectFreeList(int blockNum = 0, bool placementNew = false) : capacity(blockNum), useCount(0), placementNew(placementNew), pFreeNode(nullptr)
 		{
+			InitializeSRWLock(&g_PacketPoolLock);
 			//처음부터 free list라면 아무것도 해줄필요없음.
 			if (capacity == 0) return;
 			//그게 아니라면 n번 alloc호출과 동일하게 만들어줘야됨 단 capacity만 증가되어야됨.
@@ -65,6 +70,7 @@ namespace univ_dev
 
 		ObjectType* Alloc()
 		{
+			AcquireSRWLockExclusive(&g_PacketPoolLock);
 			if (pFreeNode != nullptr)
 			{
 				pFreeNode->useFlag = true;
@@ -75,6 +81,7 @@ namespace univ_dev
 				{
 					new(pObj) ObjectType;
 				}
+				ReleaseSRWLockExclusive(&g_PacketPoolLock);
 				return pObj;
 			}
 			DataNode<ObjectType>* newNode = new DataNode<ObjectType>();
@@ -84,10 +91,12 @@ namespace univ_dev
 			ObjectType* pObj = &newNode->object;
 			useCount++;
 			capacity++;
+			ReleaseSRWLockExclusive(&g_PacketPoolLock);
 			return pObj;
 		}
 		bool Free(ObjectType* pData)
 		{
+			AcquireSRWLockExclusive(&g_PacketPoolLock);
 			char* temp = (char*)pData;
 			temp -= sizeof(ObjectFreeList<ObjectType>*);
 			DataNode<ObjectType>* tempNode = (DataNode<ObjectType>*)temp;
@@ -100,6 +109,7 @@ namespace univ_dev
 			tempNode->next = pFreeNode;
 			pFreeNode = tempNode;
 			pFreeNode->useFlag = false;
+			ReleaseSRWLockExclusive(&g_PacketPoolLock);
 			return true;
 		}
 
@@ -111,6 +121,7 @@ namespace univ_dev
 		int useCount = 0;
 		bool placementNew;
 		DataNode<ObjectType>* pFreeNode;
+		SRWLOCK g_PacketPoolLock;
 	};
 }
 

@@ -48,7 +48,6 @@ namespace univ_dev
 		char* readPointer;
 		char* writePointer;
 		SRWLOCK lock;
-
 		int ringBufferSize;
 	};
 }

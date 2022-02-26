@@ -125,7 +125,7 @@ namespace univ_dev
 		_itoa_s(t.tm_mday, tempBuffer, 10);
 		strcat_s(fileName, tempBuffer);
 		strcat_s(fileName, "_");
-		_itoa_s(t.tm_hour + 1, tempBuffer, 10);
+		_itoa_s(t.tm_hour, tempBuffer, 10);
 		strcat_s(fileName, tempBuffer);
 		strcat_s(fileName, "_");
 		//_itoa_s(t.tm_min, tempBuffer, 10);
@@ -148,7 +148,7 @@ namespace univ_dev
 		{
 			if (samples[i].flag)
 			{
-				fprintf(file, "%s,%u,%llf,%llf,%llf,%llf,%llf,%llf,%lld\n",
+				fprintf(file, "%s	,%u	,\'%.9f\',\'%.9f\',\'%.9f\',\'%.9f\',\'%.9f\',\'%.9f\',%lld\n",
 					samples[i].profileName,
 					samples[i].threadID,
 					(double)samples[i].totalTime / freq.QuadPart,

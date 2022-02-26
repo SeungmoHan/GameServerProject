@@ -11,30 +11,30 @@ namespace univ_dev
     struct JobInfo
     {
         OVERLAPPED overlapped;
-        bool isRecv;
+        DWORD isRecv;
         univ_dev::RingBuffer ringBuffer;
     };
 
 
     struct Session
     {
+        ULONGLONG sessionID;
         JobInfo sendJob;
         JobInfo recvJob;
         SOCKET sock;
-
-        unsigned int ioCounts;
+        ULONG ip;
+        USHORT port;
         DWORD ioFlag;
-
-        unsigned long ip;
-        unsigned short port;
+        DWORD ioCounts;
+        SRWLOCK lock;
     };
 
-    extern std::unordered_map<SOCKET, Session*> g_SessionMap;
-    extern univ_dev::ObjectFreeList<Session> g_SessionObjectPool;
-    extern SRWLOCK g_SessionLock;
-    Session* FindSession(SOCKET key);
-    Session* CreateSession(SOCKET key, sockaddr_in clientaddr, HANDLE hIOCP);
-    void ReleaseSession(SOCKET key);
+    //extern std::unordered_map<SOCKET, Session*> g_SessionMap;
+    //extern univ_dev::ObjectFreeList<Session> g_SessionObjectPool;
+    //extern SRWLOCK g_SessionLock;
+    //Session* FindAndLockSession(SOCKET key);
+    //Session* CreateSession(SOCKET key, sockaddr_in clientaddr, HANDLE hIOCP);
+    //void ReleaseSession(SOCKET key);
 }
 
 
