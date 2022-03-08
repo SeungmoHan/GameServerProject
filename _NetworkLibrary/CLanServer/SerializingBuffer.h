@@ -25,8 +25,13 @@ namespace univ_dev
 		char* GetReadPtr();
 		char* GetWritePtr();
 
+		void AddRef();
+		bool SubRef();
+
 		int MoveWritePtr(int size);
 		int MoveReadPtr(int size);
+
+
 
 		Packet& operator=(const Packet& other);
 		Packet& operator>>(unsigned char& value);
@@ -62,6 +67,8 @@ namespace univ_dev
 		char* _End;
 		char* _WritePointer;
 		char* _ReadPointer;
+
+		int _RefCount;
 
 		int _BufferSize;
 	};

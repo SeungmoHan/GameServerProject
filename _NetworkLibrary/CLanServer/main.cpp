@@ -9,6 +9,8 @@ int main()
     GetSystemInfo(&info);
     int threadPoolSize = info.dwNumberOfProcessors * 2;
     int runningThread = info.dwNumberOfProcessors;
+    //threadPoolSize = 8;
+    //runningThread = 8;
     printf("ThreadPool Size : ");
     scanf_s("%d", &threadPoolSize);
     printf("Num of Running Thread : ");

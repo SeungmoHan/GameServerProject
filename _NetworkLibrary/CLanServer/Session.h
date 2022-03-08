@@ -5,7 +5,7 @@
 
 #include "CoreBase.h"
 #include <unordered_map>
-
+#include <list>
 namespace univ_dev
 {
     struct JobInfo
@@ -21,6 +21,8 @@ namespace univ_dev
         ULONGLONG _SessionID;
         JobInfo _SendJob;
         JobInfo _RecvJob;
+        
+        DWORD _SendBufferCount;
         SOCKET _Sock;
         ULONG _SessionIP;
         WCHAR _SessionIPStr[20];

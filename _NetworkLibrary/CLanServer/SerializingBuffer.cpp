@@ -3,10 +3,10 @@
 
 namespace univ_dev
 {
-	Packet::Packet() : _Begin(new char[PacketSize::DefaultSize]), _End(_Begin + PacketSize::DefaultSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(PacketSize::DefaultSize) {}
+	Packet::Packet() : _Begin(new char[PacketSize::DefaultSize]), _End(_Begin + PacketSize::DefaultSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(PacketSize::DefaultSize),_RefCount(0) {}
 	//Packet::Packet() : begin((char*)bufferFreeList.Alloc()), end(begin + PacketSize::DefaultSize), writePointer(begin), readPointer(begin), bufferSize(PacketSize::DefaultSize) {}
 
-	Packet::Packet(int bufferSize) : _Begin(new char[bufferSize]), _End(_Begin + bufferSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(bufferSize) {}
+	Packet::Packet(int bufferSize) : _Begin(new char[bufferSize]), _End(_Begin + bufferSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(bufferSize), _RefCount(0) {}
 
 	Packet::~Packet()
 	{
@@ -31,6 +31,19 @@ namespace univ_dev
 	char* Packet::GetWritePtr()
 	{
 		return _WritePointer;
+	}
+
+	void Packet::AddRef()
+	{
+		_InterlockedIncrement((long*)&_RefCount);
+	}
+
+	bool Packet::SubRef()
+	{
+		int r = _InterlockedDecrement((long*)&_RefCount);
+		if (r <= 0)
+			return true;
+		return false;
 	}
 
 	char* Packet::GetReadPtr()

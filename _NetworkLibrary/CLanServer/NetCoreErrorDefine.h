@@ -9,6 +9,7 @@
 #define ACCEPT_THREAD_COUNT (size_t)1
 #define MONITERING_THREAD_COUNT (size_t)1
 
+#define dfTEST_ERROR_GENERATOR_CODE 44444
 
 //---------------------------------------------------------------
 // NetCore Initialize Failed Error Code
@@ -26,6 +27,7 @@
 #define dfNCINIT_LISTEN_SOCKET_CREATE_FAILED 8004
 
 #define dfNCINIT_SOCKET_BIND_FAILED 8005
+#define dfNCINIT_SOCKET_CONNECT_FAILED 8005
 
 #define dfNCINIT_SOCKET_LISTEN_FAILED 8006
 
