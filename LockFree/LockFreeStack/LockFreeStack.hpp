@@ -32,17 +32,22 @@ namespace univ_dev
 			DWORD _LoopCount;
 		};
 
-		bool CAS(Node** destNode, Node* newNode, Node* originNode)
-		{
-			return originNode == InterlockedCompareExchangePointer((PVOID*)destNode, newNode, originNode);
-		}
-
 	public:
-		LockFreeStack() : _Top(nullptr), _Size(0), _TestSample(new Test[TEST_CASE_SIZE + 1000]),_PopCount(0), _TestSampleIdx(0){ }
+		LockFreeStack() : _Top(nullptr), _Size(0),_Pool(new LockFreeMemoryPool<Node>()), _TestSample(new Test[TEST_CASE_SIZE + 1000]),_PopCount(0), _TestSampleIdx(0){ }
 
 		int size() { return _Size; }
-		int pool_capacity(){ return _Pool.GetCapacityCount(); }
-		int pool_size() { return _Pool.GetUseCount(); }
+		//int pool_capacity(){ return _Pool.GetCapacityCount(); }
+		//int pool_size() { return _Pool.GetUseCount(); }
+		int pool_capacity(){ return _Pool->GetCapacityCount(); }
+		int pool_size() { return _Pool->GetUseCount(); }
+		unsigned long long GetTotalPushPopCount()
+		{
+			return _TotalCount;
+		}
+		void SetTotalPushPopCountZero()
+		{
+			InterlockedExchange(&this->_TotalCount, 0);
+		}
 		void push(T data)
 		{
 			if (_TestSampleIdx >= TEST_CASE_SIZE - 1)
@@ -54,17 +59,24 @@ namespace univ_dev
 			_TestSample[curIdx].isPush= true;
 			_TestSample[curIdx]._LoopCount = 0;
 			_TestSample[curIdx]._CurrentNodeData = data;
-			Node* newNode = _Pool.Alloc();
+
+			Node* newNode = _Pool->Alloc();
+			//Node* newNode = _Pool.Alloc();
+			
 			newNode->_Data = data;
 			Node* currentTop = nullptr;
 			LONG64 popCount = 0;
 			alignas(16) LONG64 comp[2];
+
 			DWORD loopCount = 0;
 
 			while (true)
 			{
 				currentTop = this->_Top;
-				popCount = InterlockedIncrement((unsigned long long*) & this->_PopCount);
+
+				//popCount = InterlockedIncrement((unsigned long long*)&this->_PopCount);
+				popCount = this->_PopCount;
+
 				_TestSample[curIdx]._BeginStackSize = _Size;
 				_TestSample[curIdx]._CurrentTop = currentTop;
 				_TestSample[curIdx]._PopCount = popCount;
@@ -72,17 +84,19 @@ namespace univ_dev
 				newNode->_Next = currentTop;
 				comp[0] = (LONG64)currentTop;
 				comp[1] = popCount;
+
 				loopCount++;
 
-				if (InterlockedCompareExchange128((LONG64*)&this->_Top, comp[1], (LONG64)newNode, comp) == 1)
+				if (InterlockedCompareExchange128((LONG64*)&this->_Top, comp[1] + 1, (LONG64)newNode, comp) == 1)
 					break;
 			}
-			_TestSample[curIdx]._LoopCount = loopCount;
 
 			int endStackSize = InterlockedIncrement((unsigned int*)&_Size);
+
+			_TestSample[curIdx]._LoopCount = loopCount;
 			_TestSample[curIdx]._NewTop = newNode;
 			_TestSample[curIdx]._EndStackSize = endStackSize;
-
+			InterlockedIncrement(&_TotalCount);
 		}
 		bool pop(T& ret)
 		{
@@ -97,24 +111,27 @@ namespace univ_dev
 			Node* currentTop = nullptr;
 			Node* nextNode = nullptr;
 			LONG64 popCount;
-			DWORD loopCount = 0;
 			alignas(16)LONG64 comp[2];
 
+			DWORD loopCount = 0;
 
 
 
 			while (true)
 			{
-				_TestSample[curIdx]._BeginStackSize = _Size;
 				currentTop = this->_Top;
 				if (this->isempty(currentTop))
 				{
 					CRASH();
 					return false;
 				}
-				popCount = InterlockedIncrement((unsigned long long*) & this->_PopCount);
+				
+				//popCount = InterlockedIncrement((unsigned long long*) & this->_PopCount);
+				popCount = this->_PopCount;
+
 				nextNode = currentTop->_Next;
 
+				_TestSample[curIdx]._BeginStackSize = _Size;
 				_TestSample[curIdx]._CurrentTop = currentTop;
 				_TestSample[curIdx]._PopCount = popCount;
 				loopCount++;
@@ -123,17 +140,22 @@ namespace univ_dev
 				comp[0] = (LONG64)currentTop;
 				comp[1] = popCount;
 
-				if (InterlockedCompareExchange128((LONG64*)&this->_Top, comp[1], (LONG64)nextNode, comp) == 1)
+				if (InterlockedCompareExchange128((LONG64*)&this->_Top, comp[1] + 1, (LONG64)nextNode, comp) == 1)
 					break;
 			}
 
-			_TestSample[curIdx]._LoopCount = loopCount;
-			_TestSample[curIdx]._NewTop = nextNode;
 
 			ret = currentTop->_Data;
+
+			_TestSample[curIdx]._NewTop = nextNode;
+			_TestSample[curIdx]._LoopCount = loopCount;
 			_TestSample[curIdx]._CurrentNodeData = ret;
-			_Pool.Free(currentTop);
+
+			//_Pool.Free(currentTop);
+			_Pool->Free(currentTop);
+
 			InterlockedDecrement((unsigned int*)&_Size);
+			InterlockedIncrement(&_TotalCount);
 			return true;
 		}
 		bool isempty(Node* top)
@@ -143,11 +165,15 @@ namespace univ_dev
 	private:
 		alignas(16) Node* _Top;
 		__int64 _PopCount;
-		int _Size;
-		LockFreeMemoryPool<Node> _Pool;
+		alignas(64) int _Size;
+		LockFreeMemoryPool<Node>* _Pool;
 
-		DWORD _TestSampleIdx;
+		//int _Size;
+		//LockFreeMemoryPool<Node> _Pool;
+
+		alignas(64) DWORD _TestSampleIdx;
 		Test* _TestSample;
+		alignas(64) unsigned long long _TotalCount = 0;
 	};
 }
 

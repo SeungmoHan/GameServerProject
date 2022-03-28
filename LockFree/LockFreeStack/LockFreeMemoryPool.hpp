@@ -79,12 +79,13 @@ namespace univ_dev
 					ObjectType* newObject = NewAlloc();
 					return newObject;
 				}
-				popCount = InterlockedIncrement((unsigned long long*)&this->_PopCount);
+				//popCount = InterlockedIncrement((unsigned long long*)&this->_PopCount);
+				popCount = this->_PopCount;
 				comp[0] = (LONG64)currentTop;
 				comp[1] = popCount;
 				nextNode = currentTop->_NextNode;
 
-				if (InterlockedCompareExchange128((LONG64*)&_FreeNode, popCount, (LONG64)nextNode, comp) == 1)
+				if (InterlockedCompareExchange128((LONG64*)&_FreeNode, comp[1], (LONG64)nextNode, comp) == 1)
 					break;
 			}
 			//if (testIdx >= TEST_CASE_SIZE - 1)
@@ -108,6 +109,12 @@ namespace univ_dev
 			InterlockedIncrement(&currentTop->_UseFlag);
 			//InterlockedExchange(&currentTop->_UseFlag, true);
 			ObjectType* pObj = &currentTop->_Object;
+
+			if (this->_PlacementNew)
+			{
+				new  (pObj) ObjectType();
+			}
+
 			//testSample[curIdx].pObj = pObj;
 			InterlockedIncrement((unsigned long*)&this->_UseCount);
 			return pObj;
@@ -134,6 +141,10 @@ namespace univ_dev
 			if (removeNode->_UseFlag == 0) CRASH();
 			if (this->_UseCount < 0) CRASH();
 
+			if (this->_PlacementNew)
+			{
+				removeNode->_Object.~ObjectType();
+			}
 			//testSample[curIdx].Cases = 3;
 			//testSample[curIdx].threadID = GetCurrentThreadId();
 			
@@ -151,7 +162,8 @@ namespace univ_dev
 					Sleep(INFINITE);
 				}
 				currentTop = this->_FreeNode;
-				popCount = InterlockedIncrement((unsigned long long*)&this->_PopCount);
+				//popCount = InterlockedIncrement((unsigned long long*)&this->_PopCount);
+				popCount = this->_PopCount;
 
 
 				comp[0] = (LONG64)currentTop;
@@ -168,7 +180,7 @@ namespace univ_dev
 				//__faststorefence();
 
 				removeNode->_NextNode = currentTop;
-				if (InterlockedCompareExchange128((LONG64*)&this->_FreeNode, comp[1], (LONG64)removeNode, (LONG64*)comp) == 1)
+				if (InterlockedCompareExchange128((LONG64*)&this->_FreeNode, comp[1] + 1, (LONG64)removeNode, (LONG64*)comp) == 1)
 					break;
 			}
 			InterlockedDecrement((unsigned long*)&this->_UseCount);
@@ -183,16 +195,22 @@ namespace univ_dev
 			//if (testIdx >= TEST_CASE_SIZE - 1)
 			//	InterlockedExchange((unsigned long long*) & testIdx, 0);
 			//int curIdx = InterlockedIncrement((unsigned long long*) & testIdx);
-			DWORD curTime = timeGetTime();
-			DataNode* newNode = new DataNode();
+			//DWORD curTime = timeGetTime();
+			DataNode* newNode = (DataNode*)malloc(sizeof(DataNode));
+			if (newNode == nullptr) CRASH();
 			newNode->_UnderFlowGuard = this;
 			newNode->_OverFlowGuard = this;
-			newNode->_UseFlag++;
+			newNode->_UseFlag = 0;
 			newNode->_NextNode = nullptr;
 			InterlockedIncrement((LONG*)&this->_UseCount);
-			InterlockedIncrement((LONG*)&this->_Capacity);
+			this->_Capacity++;
+			//InterlockedIncrement((LONG*)&this->_Capacity);
 			ObjectType* pObj = &newNode->_Object;
-
+			newNode->_UseFlag++;
+			if (!this->_PlacementNew)
+			{
+				new (pObj) ObjectType();
+			}
 			//DataNode* curTop = this->_FreeNode;
 			//testSample[curIdx].Cases = 1;
 			//testSample[curIdx].threadID = GetCurrentThreadId();
@@ -209,8 +227,10 @@ namespace univ_dev
 		alignas(16)DataNode* _FreeNode;
 		__int64 _PopCount;
 
+		//int _UseCount = 0;
+		alignas(64) int _UseCount = 0;
+
 		int _Capacity = 0;
-		int _UseCount = 0;
 		bool _PlacementNew = false;
 
 		//Test* testSample = nullptr;
