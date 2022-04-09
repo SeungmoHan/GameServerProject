@@ -55,6 +55,16 @@ namespace univ_dev
 	//RecvPost -> WSARecv call
 	void CLanServer::RecvPost(Session* session)
 	{
+		if (session->_SessionID == 0)
+		{
+			DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"RecvPost -> session id is zero");
+			return;
+		}
+		if (session->_Sock == 0)
+		{
+			DispatchError(dfNCWORKER_SESSION_SOCK_ZERO, session->_SessionID, L"RecvPost -> session sock is zero");
+			return;
+		}
 		int recvRet;
 		WSABUF recvWSABuf[2];
 		recvWSABuf[0].buf = session->_RecvJob._RingBuffer.GetWritePtr();
@@ -79,11 +89,12 @@ namespace univ_dev
 			{
 				if (err != 10054 && err != 10063)
 				{
-					DispatchError(dfNCWORKER_WSARECV_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING");
+					this->DispatchError(dfNCWORKER_WSARECV_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING");
 				}
-				DWORD IOCount = InterlockedDecrement(&session->_IOCounts);
-				if (IOCount == 0)
-					ReleaseSession(session->_SessionID);
+				//this->DisconnectSession(session);
+				DWORD r = InterlockedDecrement(&session->_IOCounts);
+				//if (r == 0)
+				//	this->ReleaseSession(session->_SessionID);
 			}
 			else
 			{
@@ -94,13 +105,60 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
-
+	
+	//---------------------------------------------------------------------------------------------------------------------------------
+	//---------------------------------------------------------------------------------------------------------------------------------
+	// helper function
+	bool CLanServer::IsSessionValid(Session* session)
+	{
+		if (session->_SessionID == 0)
+		{
+			DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"SendPost -> session id is zero");
+			return false;
+		}
+		if (session->_Sock == 0)
+		{
+			DispatchError(dfNCWORKER_SESSION_SOCK_ZERO, session->_SessionID, L"SendPost -> session sock is zero");
+			return false;
+		}
+		return true;
+	}
+	bool CLanServer::IsSessionValid(ULONGLONG sessionID)
+	{
+		Session* session = FindSession(sessionID);
+		if (session == nullptr)
+		{
+			DispatchError(dfNCWORKER_INVALID_SESSION_ID, 0, L"IsSessionValid -> session not found");
+			return false;
+		}
+		if (session->_SessionID == 0)
+		{
+			DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"IsSessionValid -> session id is zero");
+			return false;
+		}
+		if (session->_Sock == 0)
+		{
+			DispatchError(dfNCWORKER_SESSION_SOCK_ZERO, session->_SessionID, L"IsSessionValid -> session sock is zero");
+			return false;
+		}
+		return true;
+	}
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//SendPost -> WSASend call
 	void CLanServer::SendPost(Session* session)
 	{
+		if (session->_SessionID == 0)
+		{
+			DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"SendPost -> session id is zero");
+			return;
+		}
+		if (session->_Sock == 0)
+		{
+			DispatchError(dfNCWORKER_SESSION_SOCK_ZERO, session->_SessionID, L"SendPost -> session sock is zero");
+			return;
+		}
 		if (InterlockedExchange(&session->_IOFlag, true) == false)
 		{
 			int useSize = session->_SendJob._RingBuffer.GetUseSize();
@@ -121,10 +179,13 @@ namespace univ_dev
 					sendWSABuf[i].buf = packetArr[i]->GetReadPtr();
 					sendWSABuf[i].len = packetArr[i]->GetBufferSize();
 				}
+
 				if (cnt < 200)
 					sendWSABuf[cnt].len = 0;
+
 				InterlockedExchange(&session->_SendBufferCount, cnt);
 				InterlockedIncrement(&session->_IOCounts);
+
 				sendRet = WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 				if (sendRet == 0)
 				{
@@ -139,10 +200,11 @@ namespace univ_dev
 						{
 							DispatchError(dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, L"WSASend ret is SOCKET_ERROR and error code is not WSA_IO_PENDING");
 						}
-						InterlockedDecrement(&session->_IOCounts);
-						DWORD IOCount = InterlockedExchange(&session->_IOFlag, false);
-						if (IOCount == 0)
-							ReleaseSession(session->_SessionID);
+						//DisconnectSession(session);
+						DWORD IOCount = InterlockedDecrement(&session->_IOCounts);
+						InterlockedExchange(&session->_IOFlag, false);
+						//if (IOCount == 0)
+						//	ReleaseSession(session->_SessionID);
 					}
 					else
 					{
@@ -169,6 +231,7 @@ namespace univ_dev
 		if (session == nullptr)
 		{
 			DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"SendPacket -> Invalid SessionID in param API err is session ID");
+			packet->Clear();
 			_PacketPool.Free(packet);
 			return;
 		}
@@ -176,22 +239,25 @@ namespace univ_dev
 		if (session->_SessionID != sessionID)
 		{
 			DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"SendPacket -> session->_SessioID != sessionID(param) API err is session ID");
+			packet->Clear();
 			_PacketPool.Free(packet);
 			return;
 		}
 		//그게 아니라면 정상 송신
+		packet->AddRef();
 		int eqRet = session->_SendJob._RingBuffer.Enqueue((const char*)&packet, sizeof(Packet*));
 		if (eqRet != sizeof(Packet*))
 		{
-			printf("eqRet is sizeof(Packet*): %llu EQRET : %d\n", sizeof(Packet), eqRet);
 			DispatchError(dfNCWORKER_SENDQ_IS_FULL, 0, L"send ringbuffer is full");
+			packet->SubRef();
+			packet->Clear();
 			_PacketPool.Free(packet);
 			DisconnectSession(session);
 			return;
 		}
 		if (_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
 		{
-			Profiler profiler("SendPost2", GetCurrentThreadId());
+			Profiler profiler("SendPost2");
 			this->SendPost(session);
 		}
 		else
@@ -409,7 +475,7 @@ namespace univ_dev
 		timeBeginPeriod(1);
 		InitializeCriticalSection(&_SessionMapLock);
 		//InitializeSRWLock(&sessionMapLock);
-		univ_dev::InitializeProfilerAndSamples();
+		univ_dev::InitProfile();
 		fprintf(MainThreadLogFile, "timeBeginPeriod, CSLocker Init, ProfilerSample Init End\n");
 		printf("timeBeginPeriod, CSLocker Init, ProfilerSample Init End\n");
 		fflush(MainThreadLogFile);
@@ -544,7 +610,7 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
-				// --------------------------------------------------------------------------------------------------------------
+		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// Send IO 비동기 처리를 위한 버퍼 사이즈 0 세팅
 		if (this->_NagleOff)
@@ -556,7 +622,6 @@ namespace univ_dev
 			printf("setsockopt -> Nagle Algorithm Off End\n");
 			fflush(MainThreadLogFile);
 		}
-
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
@@ -584,6 +649,17 @@ namespace univ_dev
 		fflush(MainThreadLogFile);
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
+
+
+		// --------------------------------------------------------------------------------------------------------------
+		// --------------------------------------------------------------------------------------------------------------
+		// 메모리 풀 대신 사용할 세션 배열 + 인덱스 스택 초기화
+		this->_SessionArr = new Session[this->_MaxSessionCounts];
+		for (int i = 0; i < this->_MaxSessionCounts; i++)
+			this->_SessionIdx.push(i);
+		// --------------------------------------------------------------------------------------------------------------
+		// --------------------------------------------------------------------------------------------------------------
+
 
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
@@ -647,6 +723,16 @@ namespace univ_dev
 	// if this function returns false there's no data in packet
 	BOOL CLanServer::TryGetCompletedPacket(Session* session, Packet* packet, LANPacketHeader& header)
 	{
+		if (session->_SessionID == 0)
+		{
+			DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"TryGetCompletedPacket -> session id is zero");
+			return false;
+		}
+		if (session->_Sock == 0)
+		{
+			DispatchError(dfNCWORKER_SESSION_SOCK_ZERO, 0, L"TryGetCompletedPacket -> session sock is zero");
+			return false;
+		}
 		//링버퍼의 현재 사이즈가 헤더의 길이보다 작으면 더이상 뽑을게 없다는 의미임.
 		if (session->_RecvJob._RingBuffer.GetUseSize() < dfECHO_PACKET_HEADER_LENGTH)
 		{
@@ -701,11 +787,16 @@ namespace univ_dev
 			int dqRet = session->_SendJob._RingBuffer.Dequeue((char*)&packet, sizeof(Packet*));
 			if (dqRet != sizeof(Packet*))
 			{
-				printf("DQ Ret is not sizeof(Packet*)\n");
+				DispatchError(dfNCWORKER_PACKET_DQ_LENGTH_NOT_CORRECT, dqRet, L"SendProc -> SendPacket dqRet is not sizeof(Packet*)");
+				CRASH();
 			}
-			packet->Clear();
-			this->_PacketPool.Free(packet);
-			//delete packet;
+			if (packet != nullptr && packet->SubRef())
+			{
+				packet->Clear();
+				this->_PacketPool.Free(packet);
+			}
+			//else
+			//	CRASH();
 		}
 		InterlockedExchange(&session->_IOFlag, false);
 
@@ -715,7 +806,7 @@ namespace univ_dev
 		{
 			if (_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
 			{
-				Profiler profiler("SendPost", GetCurrentThreadId());
+				Profiler profiler("SendPost");
 				this->SendPost(session);
 			}
 			else
@@ -744,7 +835,7 @@ namespace univ_dev
 			LANPacketHeader header;
 			if (this->_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
 			{
-				Profiler packetProcessProfiler("Packet Process Profiler", GetCurrentThreadId());
+				Profiler packetProcessProfiler("Packet Process Profiler");
 				if (this->TryGetCompletedPacket(session, recvPacket, header))
 					this->OnRecv(session->_SessionID, recvPacket);
 				else
@@ -825,8 +916,14 @@ namespace univ_dev
 				closesocket(client_sock);
 				continue;
 			}
+			InterlockedIncrement(&newSession->_IOCounts);
 			this->OnClientJoin(newSession->_SessionIPStr, newSession->_SessionIP, newSession->_SessionPort, newSession->_SessionID);
 			this->RecvPost(newSession);
+			InterlockedDecrement(&newSession->_IOCounts);
+			
+			if (newSession->_IOCounts == 0)
+				ReleaseSession(newSession->_SessionID);
+
 			InterlockedIncrement(&_TotalAcceptSession);
 			InterlockedIncrement(&_AcceptPerSec);
 		}
@@ -868,9 +965,12 @@ namespace univ_dev
 					PostQueuedCompletionStatus(this->_IOCP, byteTransfered, completionKey, nullptr);
 					return 0;
 				}
-				int err = WSAGetLastError();
-				DispatchError(dfNCWORKER_OVERLAPPED_IS_NULL, err, L"gqcs returned and overlapped is nullptr");
-				continue;
+				else if (completionKey == 0)
+				{
+					int err = WSAGetLastError();
+					DispatchError(dfNCWORKER_OVERLAPPED_IS_NULL, err, L"gqcs returned and overlapped is nullptr");
+					continue;
+				}
 			}
 			session = (Session*)completionKey;
 			job = (JobInfo*)over;
@@ -878,13 +978,10 @@ namespace univ_dev
 			//recv 완료처리라면
 			if (GQCSRet != 0 && byteTransfered != 0 && job->_IsRecv)
 			{
-				if (session->_SessionID != sessionID)
-				{
-					continue;
-				}
+				if (session->_SessionID != sessionID) continue;
 				if (_ProfilingFlag >= PROFILING_FLAG::MAIN_LOOP_FLAG)
 				{
-					Profiler profile("RecvProc", thisThreadID);
+					Profiler profile("RecvProc");
 					this->RecvProc(session, byteTransfered);
 				}
 				else
@@ -899,7 +996,7 @@ namespace univ_dev
 				}
 				if (_ProfilingFlag >= PROFILING_FLAG::MAIN_LOOP_FLAG)
 				{
-					Profiler profile("SendProc", thisThreadID);
+					Profiler profile("SendProc");
 					this->SendProc(session, byteTransfered);
 				}
 				else
@@ -1056,6 +1153,7 @@ namespace univ_dev
 		}
 		Session* session = iter->second;
 		this->SessionMapUnlock();
+
 		return session;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1102,8 +1200,10 @@ namespace univ_dev
 	// 세션 생성 함수
 	Session* CLanServer::CreateSession(SOCKET sock, sockaddr_in clientaddr, ULONGLONG sessionID)
 	{
-		//Session* newSession = new Session();
+		//DWORD idx;
+		//this->PopSessionIndex(idx);
 		Session* newSession = this->_SessionPool.Alloc();
+		//Session* newSession = &this->_SessionArr[idx];
 		if (newSession == nullptr)
 		{
 			this->DispatchError(dfNCACCEPT_SESSION_POOL_NO_MEMORY, 0, L"session pool can not alloc no memory");
@@ -1120,6 +1220,7 @@ namespace univ_dev
 
 		if (newSession->_SessionID != 0)
 			this->DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, 0, L"last free session was not cleaned up");
+		//newSession->_SessionID = (sessionID << 16) + idx;
 		newSession->_SessionID = sessionID;
 
 		newSession->_RecvJob._IsRecv = true;
@@ -1140,14 +1241,37 @@ namespace univ_dev
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
+	bool CLanServer::PopSessionIndex(DWORD & ret)
+	{
+		SessionMapLock();
+		ret = _SessionIdx.top();
+		_SessionIdx.pop();
+		SessionMapUnlock();
+		return true;
+	}
+	//---------------------------------------------------------------------------------------------------------------------------------
+	void CLanServer::PushSessionIndex(DWORD idx)
+	{
+		SessionMapLock();
+		_SessionIdx.push(idx);
+		SessionMapUnlock();
+	}
+	//---------------------------------------------------------------------------------------------------------------------------------
+	//---------------------------------------------------------------------------------------------------------------------------------
+
+	//---------------------------------------------------------------------------------------------------------------------------------
+	//---------------------------------------------------------------------------------------------------------------------------------
 	// 세션 제거함수
 	void CLanServer::ReleaseSession(ULONGLONG sessionID)
 	{
 		if (sessionID == 0)
 		{
 			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"ReleaseSession -> Invalid Session ID API err is session ID");
+			CRASH();
 			return;
 		}
+		//DWORD idx = sessionID & 0xffff;
+		//Session* removeSession = &this->_SessionArr[idx];
 		this->SessionMapLock();
 		auto iter = this->_SessionMap.find(sessionID);
 		if (iter == this->_SessionMap.end())
@@ -1161,25 +1285,32 @@ namespace univ_dev
 		this->_SessionMap.erase(sessionID);
 		this->SessionMapUnlock();
 
+
 		if (removeSession->_SessionID != sessionID)
 		{
 			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"ReleaseSession -> Invalid SessionID in param API err is session id");
 			return;
 		}
 		DWORD sendCount = InterlockedExchange(&removeSession->_SendBufferCount, 0);
+		this->DisconnectSession(removeSession);
 		if (removeSession->_SendJob._RingBuffer.GetUseSize() / sizeof(Packet*) > sendCount)
 			sendCount = removeSession->_SendJob._RingBuffer.GetUseSize() / sizeof(Packet*);
 
 		Packet* packet = nullptr;
+
+		removeSession->_LastSessionID = InterlockedExchange(&removeSession->_SessionID, 0);
+		if (removeSession->_LastSessionID == 0)
+			return;
 		for (int i = 0; i < sendCount; i++)
 		{
 			packet = nullptr;
 			int dqRet = removeSession->_SendJob._RingBuffer.Dequeue((char*)&packet, sizeof(Packet*));
 			if (dqRet != sizeof(Packet*))
 			{
-				printf("DQ Ret is not sizeof(Packet*)\n");
+				DispatchError(dfNCWORKER_PACKET_DQ_LENGTH_NOT_CORRECT, dqRet, L"ReleaseSession -> SendPacket dqRet is not sizeof(Packet*)");
+				CRASH();
 			}
-			if (packet != nullptr)
+			if (packet != nullptr && packet->SubRef())
 			{
 				packet->Clear();
 				this->_PacketPool.Free(packet);
@@ -1187,21 +1318,26 @@ namespace univ_dev
 			else
 				CRASH();
 		}
-		SOCKET tempsock = removeSession->_Sock;
+
 		if (removeSession->_IOCounts != 0)
 		{
 			CRASH();
 		}
-		this->DisconnectSession(removeSession);
+
 		SOCKET sock = InterlockedExchange(&removeSession->_Sock, 0);
 		if (sock != 0)
+		{
+			removeSession->_LastSock = sock;
 			closesocket(sock);
-		InterlockedExchange(&removeSession->_SessionID, 0);
+		}
 		removeSession->_IOFlag = false;
 		removeSession->_SendBufferCount = 0;
 		removeSession->_SendJob._RingBuffer.ClearBuffer();
 		removeSession->_RecvJob._RingBuffer.ClearBuffer();
 		DeleteCriticalSection(&removeSession->_Lock);
+		//this->SessionMapLock();
+		//this->PushSessionIndex(idx);
+		//this->SessionMapUnlock();
 		this->_SessionPool.Free(removeSession);
 		this->OnClientLeave(sessionID);
 		InterlockedIncrement(&_TotalReleasedSession);
@@ -1227,7 +1363,9 @@ namespace univ_dev
 			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"DisconnectSession -> Invalid SessionID in param API err is session id");
 			return;
 		}
-		CancelIo((HANDLE)disconnectSession->_Sock);
+		int r = CancelIoEx((HANDLE)disconnectSession->_Sock, nullptr);
+		//int err = GetLastError();
+		//printf("R %d Err : %d\n", r, err);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	void CLanServer::DisconnectSession(Session* session)
@@ -1239,10 +1377,12 @@ namespace univ_dev
 		}
 		if (session->_SessionID == 0)
 		{
-			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"DisconnectSession -> Session->_SessionID == 0");
+			//this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"DisconnectSession -> Session->_SessionID == 0");
 			return;
 		}
-		CancelIo((HANDLE)session->_Sock);
+		int r = CancelIoEx((HANDLE)session->_Sock, nullptr);
+		//int err = GetLastError();
+		//printf("R %d Err : %d\n", r,err);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1254,7 +1394,7 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// 생성자 소멸자
 	CLanServer::CLanServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts)
-		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _PacketPerSec{ 0 }, _RecvIOPendingCount{ 0 }, _RecvSuccessCount{ 0 }, _SendIOPendingCount{ 0 }, _SendSuccessCount{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _LogThread{ nullptr }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _ProfilingFlag{ PROFILING_FLAG::OFF_FLAG }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 },_NagleOff(nagleOff),_MaxSessionCounts(maxSessionCounts),_AcceptPerSec(0)
+		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _PacketPerSec{ 0 }, _RecvIOPendingCount{ 0 }, _RecvSuccessCount{ 0 }, _SendIOPendingCount{ 0 }, _SendSuccessCount{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _LogThread{ nullptr }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _ProfilingFlag{ PROFILING_FLAG::OFF_FLAG }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 }, _NagleOff{ nagleOff }, _MaxSessionCounts{ maxSessionCounts }, _AcceptPerSec{ 0 }, _SessionArr{ nullptr }
 	{
 		this->CLanServerStartup();
 	}

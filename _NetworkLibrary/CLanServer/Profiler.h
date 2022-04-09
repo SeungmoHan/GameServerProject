@@ -1,60 +1,54 @@
 #pragma once
 #ifndef __PROFILER_HEADER__
 #define __PROFILER_HEADER__
-#define __UNIV_DEVELOPER_
-
 #include <Windows.h>
 
-#ifdef PROFILE
+#define PRO_BEGIN(arg) BeginProfiling(arg)
+#define PRO_END(arg) EndProfiling(arg)
 
-#define BEGIN_PROFILE(arg) BeginProfiling(arg)
-#define END_PROFILE(arg) EndProfiling(arg)
-
-#else
-#define BEGIN_PROFILE(arg)
-#define END_PROFILE(arg)
-
-#endif 
 namespace univ_dev
 {
 
-	void BeginProfiling(const char* name, DWORD threadID);
-	void EndProfiling(const char* name, DWORD threadID);
+	void InitProfile();
+	void BeginProfiling(const char* name);
+	void EndProfiling(const char* name);
 	void SaveProfiling();
 	void ResetProfiling();
-	void InitializeProfilerAndSamples();
-	constexpr int SAMPLE_SIZE = 100;
-	extern SRWLOCK g_ProfileLock;
 
 	class Profiler
 	{
 	public:
-		Profiler(const char* name, DWORD threadID) : _Name(name), _ThreadID(threadID)
+		Profiler(const char* name) : name(name)
 		{
-			BeginProfiling(name, threadID);
+			BeginProfiling(name);
 		}
 		~Profiler()
 		{
-			EndProfiling(_Name, _ThreadID);
+			EndProfiling(name);
 		}
 	private:
-		const char* _Name;
-		DWORD _ThreadID;
+		const char* name;
 	};
-
+	constexpr int SAMPLE_SIZE = 100;
+	constexpr int THREAD_SIZE = 30;
 	struct PROFILE_SAMPLE
 	{
-		bool _Flag;
-		DWORD _ThreadID;
-		char _ProfileName[64];
-		LARGE_INTEGER _StartTime;
-		__int64 _TotalTime;
-		__int64 _Min[2];
-		__int64 _Max[2];
-		__int64 _CallCounts;
+		DWORD flag;
+		char profileName[64];
+		LARGE_INTEGER startTime;
+		__int64 totalTime;
+		__int64 min[2];
+		__int64 max[2];
+		__int64 callCounts;
 	};
 
-	extern PROFILE_SAMPLE samples[SAMPLE_SIZE];
+	struct THREAD_SAMPLE
+	{
+		DWORD threadID;
+		PROFILE_SAMPLE profileSample[SAMPLE_SIZE];
+	};
+
+
 #endif // !__PROFILER_HEADER__
 }
 

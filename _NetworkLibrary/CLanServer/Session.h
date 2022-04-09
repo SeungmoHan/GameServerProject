@@ -30,6 +30,10 @@ namespace univ_dev
         DWORD _IOFlag;
         DWORD _IOCounts;
         CRITICAL_SECTION _Lock;
+
+
+        SOCKET _LastSock;
+        SOCKET _LastSessionID;
     };
 }
 

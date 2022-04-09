@@ -39,7 +39,8 @@ namespace univ_dev
 		FILE* errorLog = nullptr;
 		while (errorLog == nullptr)
 			fopen_s(&errorLog, "libraryErrorLog.txt", "ab");
-		fwprintf(errorLog, L"Server Start At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin, errorCode, error, GetLastAPIErrorCode());
+
+		fwprintf(errorLog, L"Server Start At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin / 1000, errorCode, error, GetLastAPIErrorCode());
 		fclose(errorLog);
 	}
 
@@ -51,15 +52,12 @@ namespace univ_dev
 
 	void EchoServer::OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID)
 	{
-		//wprintf(L"%s:%d join\n", ipStr, port);
 		Packet* loginPacket = _PacketPool.Alloc();
 		loginPacket->Clear();
 
 		unsigned short payloadSize = 8;
 		ULONGLONG data = 0x7fffffffffffffff;
-		//printf("Join %llu\n", sessionID);
 		(*loginPacket) << payloadSize << data;
-		//printf("OnClientJoin -> SendPacketSize : %d\n", loginPacket->GetBufferSize());
 		SendPacket(sessionID, loginPacket);
 	}
 

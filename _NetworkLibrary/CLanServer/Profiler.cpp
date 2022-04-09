@@ -5,104 +5,132 @@
 
 namespace univ_dev
 {
-	PROFILE_SAMPLE samples[SAMPLE_SIZE]{ 0 };
-	SRWLOCK g_ProfileLock;
+	THREAD_SAMPLE samples[THREAD_SIZE];
 
-	void InitializeProfilerAndSamples()
+	DWORD gtls_ProfilingIdx;
+	DWORD g_CurrentSampleIdx;
+	void InitProfile()
 	{
-		InitializeSRWLock(&g_ProfileLock);
-		memset(samples, 0, sizeof(samples));
+		gtls_ProfilingIdx = TlsAlloc();
+		g_CurrentSampleIdx = 0;
+
+		ZeroMemory(samples, sizeof(THREAD_SAMPLE)*THREAD_SIZE);
+
 	}
-
-	void BeginProfiling(const char* name, DWORD threadID)
+	void BeginProfiling(const char* name)
 	{
-		AcquireSRWLockExclusive(&g_ProfileLock);
+		DWORD currentThreadIdx = (DWORD)TlsGetValue(gtls_ProfilingIdx);
+		if (currentThreadIdx == 0)
+		{
+			//처음일때
+			currentThreadIdx = InterlockedIncrement(&g_CurrentSampleIdx);
+			samples[currentThreadIdx].threadID = GetCurrentThreadId();
+			if (!TlsSetValue(gtls_ProfilingIdx, (LPVOID)currentThreadIdx))
+			{
+				int* ptr = nullptr;
+				*ptr = 100;
+			}
+		}
 		for (size_t i = 0; i < SAMPLE_SIZE; i++)
 		{
 			//찾았을때 있을경우
-			if (samples[i]._Flag && strcmp(samples[i]._ProfileName, name) == 0 && threadID == samples[i]._ThreadID)
+			if (GetCurrentThreadId() == samples[currentThreadIdx].threadID && samples[currentThreadIdx].profileSample[i].flag && strcmp(samples[currentThreadIdx].profileSample[i].profileName, name) == 0)
 			{
-				if (samples[i]._StartTime.QuadPart != 0)
+				if (samples[currentThreadIdx].profileSample[i].startTime.QuadPart != 0)
 				{
 					int* ptr = nullptr;
 					*ptr = 100;
 				}
-				QueryPerformanceCounter(&samples[i]._StartTime);
+				QueryPerformanceCounter(&samples[currentThreadIdx].profileSample[i].startTime);
 				break;
 			}
 			//여기부터는 없을경우
-			else if (!samples[i]._Flag)
+			else if (!samples[currentThreadIdx].profileSample[i].flag)
 			{
-				samples[i]._Flag = true;
-				samples[i]._ThreadID = threadID;
-				strcpy_s(samples[i]._ProfileName, name);
-				samples[i]._Min[0] = MAXLONGLONG;
-				samples[i]._Min[1] = MAXLONGLONG;
-				samples[i]._Max[0] = MINLONGLONG;
-				samples[i]._Max[1] = MINLONGLONG;
-				samples[i]._CallCounts = 0;
-				samples[i]._TotalTime = 0;
-				QueryPerformanceCounter(&samples[i]._StartTime);
+				samples[currentThreadIdx].profileSample[i].flag = true;
+				strcpy_s(samples[currentThreadIdx].profileSample[i].profileName, name);
+				samples[currentThreadIdx].profileSample[i].min[0] = MAXLONGLONG;
+				samples[currentThreadIdx].profileSample[i].min[1] = MAXLONGLONG;
+				samples[currentThreadIdx].profileSample[i].max[0] = MINLONGLONG;
+				samples[currentThreadIdx].profileSample[i].max[1] = MINLONGLONG;
+				samples[currentThreadIdx].profileSample[i].callCounts = 0;
+				samples[currentThreadIdx].profileSample[i].totalTime = 0;
+				QueryPerformanceCounter(&samples[currentThreadIdx].profileSample[i].startTime);
 				break;
 			}
 		}
-		ReleaseSRWLockExclusive(&g_ProfileLock);
 	}
 
-	void EndProfiling(const char* name, DWORD threadID)
+	void EndProfiling(const char* name)
 	{
-		AcquireSRWLockExclusive(&g_ProfileLock);
+		DWORD currentThreadIdx = (DWORD)TlsGetValue(gtls_ProfilingIdx);
+		if (currentThreadIdx == 0)
+		{
+			int* ptr = nullptr;
+			*ptr = 100;
+			currentThreadIdx = InterlockedIncrement(&g_CurrentSampleIdx);
+			samples[currentThreadIdx].threadID = GetCurrentThreadId();
+			if (!TlsSetValue(gtls_ProfilingIdx, (LPVOID)currentThreadIdx))
+			{
+				int* ptr = nullptr;
+				*ptr = 100;
+			}
+		}
+
 		for (size_t i = 0; i < SAMPLE_SIZE; i++)
 		{
 			//찾았을때 있을경우
-			if (samples[i]._Flag && strcmp(samples[i]._ProfileName, name) == 0 && threadID == samples[i]._ThreadID)
+			if (samples[currentThreadIdx].threadID == GetCurrentThreadId() && 
+				samples[currentThreadIdx].profileSample[i].flag &&
+				strcmp(samples[currentThreadIdx].profileSample[i].profileName, name) == 0)
 			{
 				LARGE_INTEGER endTime;
 				QueryPerformanceCounter(&endTime);
-				__int64 tempTime = endTime.QuadPart - samples[i]._StartTime.QuadPart;
-				if (samples[i]._Min[0] > tempTime)
+				__int64 tempTime = endTime.QuadPart - samples[currentThreadIdx].profileSample[i].startTime.QuadPart;
+				if (samples[currentThreadIdx].profileSample[i].min[0] > tempTime)
 				{
-					samples[i]._Min[0] = tempTime;
+					samples[currentThreadIdx].profileSample[i].min[1] = samples[currentThreadIdx].profileSample[i].min[0];
+					samples[currentThreadIdx].profileSample[i].min[0] = tempTime;
 				}
-				else if (samples[i]._Min[1] > tempTime)
+				else if (samples[currentThreadIdx].profileSample[i].min[1] > tempTime)
 				{
-					samples[i]._Min[1] = tempTime;
+					samples[currentThreadIdx].profileSample[i].min[1] = tempTime;
 				}
-				if (samples[i]._Max[0] < tempTime)
+				if (samples[currentThreadIdx].profileSample[i].max[0] < tempTime)
 				{
-					samples[i]._Max[0] = tempTime;
+					samples[currentThreadIdx].profileSample[i].max[1] = samples[currentThreadIdx].profileSample[i].max[0];
+					samples[currentThreadIdx].profileSample[i].max[0] = tempTime;
 				}
-				else if (samples[i]._Max[1] < tempTime)
+				else if (samples[currentThreadIdx].profileSample[i].max[1] < tempTime)
 				{
-					samples[i]._Max[1] = tempTime;
+					samples[currentThreadIdx].profileSample[i].max[1] = tempTime;
 				}
-				samples[i]._TotalTime += tempTime;
-				samples[i]._StartTime.QuadPart = 0;
+				samples[currentThreadIdx].profileSample[i].totalTime += tempTime;
+				samples[currentThreadIdx].profileSample[i].startTime.QuadPart = 0;
 
-				samples[i]._CallCounts++;
+				samples[currentThreadIdx].profileSample[i].callCounts++;
 				break;
 			}
 		}
-		ReleaseSRWLockExclusive(&g_ProfileLock);
 	}
 
 	void ResetProfiling()
 	{
-		AcquireSRWLockExclusive(&g_ProfileLock);
-		for (size_t i = 0; i < SAMPLE_SIZE; i++)
+		for (size_t i = 0; i < THREAD_SIZE; i++)
 		{
-			samples[i]._CallCounts = 0;
-			samples[i]._Flag = false;
-			samples[i]._ThreadID = 0;
-			samples[i]._Max[0] = MINLONGLONG;
-			samples[i]._Max[1] = MINLONGLONG;
-			samples[i]._Min[0] = MAXLONGLONG;
-			samples[i]._Min[1] = MAXLONGLONG;
-			memset(samples[i]._ProfileName, 0, sizeof(samples[i]._ProfileName));
-			samples[i]._StartTime.QuadPart = 0;
-			samples[i]._TotalTime = 0;
+			for (size_t j = 0; j < SAMPLE_SIZE; j++)
+			{
+				samples[i].profileSample[j].callCounts = 0;
+				samples[i].profileSample[j].flag = false;
+				samples[i].profileSample[j].max[0] = MINLONGLONG;
+				samples[i].profileSample[j].max[1] = MINLONGLONG;
+				samples[i].profileSample[j].min[0] = MAXLONGLONG;
+				samples[i].profileSample[j].min[1] = MAXLONGLONG;
+				memset(samples[i].profileSample[j].profileName, 0, sizeof(samples[i].profileSample[j].profileName));
+				samples[i].profileSample[j].startTime.QuadPart = 0;
+				samples[i].profileSample[j].totalTime = 0;
+			}
 		}
-		ReleaseSRWLockExclusive(&g_ProfileLock);
 	}
 
 	void SaveProfiling()
@@ -125,42 +153,69 @@ namespace univ_dev
 		_itoa_s(t.tm_mday, tempBuffer, 10);
 		strcat_s(fileName, tempBuffer);
 		strcat_s(fileName, "_");
-		_itoa_s(t.tm_hour, tempBuffer, 10);
+		_itoa_s(t.tm_hour + 1, tempBuffer, 10);
 		strcat_s(fileName, tempBuffer);
 		strcat_s(fileName, "_");
-		//_itoa_s(t.tm_min, tempBuffer, 10);
-		//strcat_s(fileName, tempBuffer);
-		//strcat_s(fileName, "_");
-		//_itoa_s(t.tm_sec, tempBuffer, 10);
-		//strcat_s(fileName, tempBuffer);
+		_itoa_s(t.tm_min, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
+		strcat_s(fileName, "_");
+		_itoa_s(t.tm_sec, tempBuffer, 10);
+		strcat_s(fileName, tempBuffer);
 		strcat_s(fileName, "Profile.csv");
-		printf("%s\n", fileName);
-		AcquireSRWLockExclusive(&g_ProfileLock);
-		while (file == nullptr)
-		{
-			fopen_s(&file, fileName, "ab");
-			printf("File is nullptr Try again\n");
-		}
+		printf(fileName);
 		LARGE_INTEGER freq;
 		QueryPerformanceFrequency(&freq);
-		fprintf(file, "name,threadid,total,average,min[0],min[1],max[0],max[1],callCount,단위 sec\n");
-		for (size_t i = 0; i < SAMPLE_SIZE; i++)
+
+		while (file == nullptr)
+			fopen_s(&file, fileName, "wb");
+
+		fprintf(file, "name,threadID,total,average,min[0],min[1],max[0],max[1],callCountExceptMinMax,단위 sec\n");
+		for (size_t i = 1; i < THREAD_SIZE; i++)
 		{
-			if (samples[i]._Flag)
+			for (size_t j = 0; j < SAMPLE_SIZE; j++)
 			{
-				fprintf(file, "%s	,%u	,\'%.9f\',\'%.9f\',\'%.9f\',\'%.9f\',\'%.9f\',\'%.9f\',%lld\n",
-					samples[i]._ProfileName,
-					samples[i]._ThreadID,
-					(double)samples[i]._TotalTime / freq.QuadPart,
-					(double)samples[i]._TotalTime / freq.QuadPart / samples[i]._CallCounts,
-					(double)samples[i]._Min[0] / freq.QuadPart,
-					(double)samples[i]._Min[1] / freq.QuadPart,
-					(double)samples[i]._Max[0] / freq.QuadPart,
-					(double)samples[i]._Max[1] / freq.QuadPart,
-					samples[i]._CallCounts);
+				if (samples[i].threadID == 0) continue;
+				if (samples[i].profileSample[j].flag)
+				{
+					if (samples[i].profileSample[j].callCounts > 4)
+					{
+						double totalTime = ((double)((double)(samples[i].profileSample[j].totalTime) -
+							((double)(samples[i].profileSample[j].min[0]) + 
+								(double)(samples[i].profileSample[j].min[1]) + 
+								(double)(samples[i].profileSample[j].max[0]) + 
+								(double)(samples[i].profileSample[j].max[1]))) /
+							freq.QuadPart);
+						__int64 callCountsExceptMinMax = samples[i].profileSample[j].callCounts - 4;
+
+						double min0 = (double)((double)samples[i].profileSample[j].min[0] / freq.QuadPart);
+						double min1 = (double)((double)samples[i].profileSample[j].min[1] / freq.QuadPart);
+						double max0 = (double)((double)samples[i].profileSample[j].max[0] / freq.QuadPart);
+						double max1 = (double)((double)samples[i].profileSample[j].max[1] / freq.QuadPart);
+
+						//printf("---------------------------------------------------\n");
+						//printf("totalTime : %llf\n", totalTime);
+						//printf("totalCallCounts : %lld\n", callCountsExceptMinMax);
+						//printf("min1 : %llf\n", min0);
+						//printf("min2 : %llf\n", min1);
+						//printf("max1 : %llf\n", max0);
+						//printf("max2 : %llf\n", max1);
+						//printf("---------------------------------------------------\n");
+
+						fprintf(file, "%s,%u,%.10llf,%.10llf,%.10llf,%.10llf,%.10llf,%.10llf,%.10lld\n",
+							samples[i].profileSample[j].profileName,
+							samples[i].threadID, totalTime, (double)(totalTime / (double)callCountsExceptMinMax),
+							min0, min1 / freq.QuadPart, max0 / freq.QuadPart, max1 / freq.QuadPart,
+							callCountsExceptMinMax);
+						continue;
+					}
+					fprintf(file, "%s,%u,Not enough samples counts for profiling\n",
+						samples[i].profileSample[j].profileName,
+						samples[i].threadID);
+
+				}
 			}
+
 		}
 		fclose(file);
-		ReleaseSRWLockExclusive(&g_ProfileLock);
 	}
 }

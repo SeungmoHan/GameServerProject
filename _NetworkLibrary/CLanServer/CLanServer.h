@@ -6,6 +6,9 @@
 #include "CoreBase.h"
 #include "NetCoreErrorDefine.h"
 #include "Session.h"
+
+#include <stack>
+
 #define dfECHO_PACKET_HEADER_LENGTH (short)sizeof(CLanServer::LANPacketHeader)
 //#define dfMAX_NUM_OF_THREAD 16
 
@@ -95,6 +98,8 @@ namespace univ_dev
 		// 技记ID -> 技记器牢磐 
 		Session*	FindAndLockSession		(ULONGLONG sessionID);
 		Session*	FindSession				(ULONGLONG sessionID);
+		bool		IsSessionValid			(Session* session);
+		bool		IsSessionValid			(ULONGLONG sessionID);
 		//------------------------------------------------------------------------------------------------
 
 		
@@ -124,8 +129,15 @@ namespace univ_dev
 		//------------------------------------------------------------------------------------------------
 		//技记 包访 按眉甸
 		CRITICAL_SECTION						_SessionMapLock;
+		Session*								_SessionArr;
+		std::stack<DWORD>							_SessionIdx;
+
+		
+		bool		PopSessionIndex			(DWORD& ret);
+		void		PushSessionIndex		(DWORD idx);
+
 		std::unordered_map<ULONGLONG, Session*> _SessionMap;
-		univ_dev::ObjectFreeList<Session>		_SessionPool;
+		ObjectFreeList<Session>					_SessionPool;
 		//------------------------------------------------------------------------------------------------
 
 		//------------------------------------------------------------------------------------------------

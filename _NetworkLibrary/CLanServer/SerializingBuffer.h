@@ -28,6 +28,8 @@ namespace univ_dev
 		void AddRef();
 		bool SubRef();
 
+		int GetRefCount() { return _RefCount; }
+
 		int MoveWritePtr(int size);
 		int MoveReadPtr(int size);
 

@@ -21,6 +21,7 @@ namespace univ_dev
 	void Packet::Clear()
 	{
 		_WritePointer = _ReadPointer = _Begin;
+		_RefCount = 0;
 	}
 
 	int Packet::GetBufferSize()
@@ -35,13 +36,18 @@ namespace univ_dev
 
 	void Packet::AddRef()
 	{
-		_InterlockedIncrement((long*)&_RefCount);
+		int r = _InterlockedIncrement((long*)&_RefCount);
+		if (r != 1)
+		{
+			int* ptr = nullptr;
+			*ptr = 100;
+		}
 	}
 
 	bool Packet::SubRef()
 	{
 		int r = _InterlockedDecrement((long*)&_RefCount);
-		if (r <= 0)
+		if (r == 0)
 			return true;
 		return false;
 	}
