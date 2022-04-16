@@ -117,6 +117,12 @@ namespace univ_dev
 		void		LockSession				(Session* session);
 		void		UnlockSession			(Session* session);
 		//------------------------------------------------------------------------------------------------
+		//------------------------------------------------------------------------------------------------
+		// 세션 사용권 획득 및 반환 함수
+		Session*	AcquireSession(ULONGLONG SessionID);
+		void		ReturnSession(ULONGLONG SessionID);
+		void		ReturnSession(Session* session);
+		//------------------------------------------------------------------------------------------------
 
 
 		//------------------------------------------------------------------------------------------------
@@ -130,14 +136,13 @@ namespace univ_dev
 		//세션 관련 객체들
 		CRITICAL_SECTION						_SessionMapLock;
 		Session*								_SessionArr;
-		std::stack<DWORD>							_SessionIdx;
+		LockFreeStack<DWORD>					_SessionIdx;
 
 		
 		bool		PopSessionIndex			(DWORD& ret);
 		void		PushSessionIndex		(DWORD idx);
 
-		std::unordered_map<ULONGLONG, Session*> _SessionMap;
-		ObjectFreeList<Session>					_SessionPool;
+		//std::unordered_map<ULONGLONG, Session*> _SessionMap;
 		//------------------------------------------------------------------------------------------------
 
 		//------------------------------------------------------------------------------------------------
@@ -165,17 +170,14 @@ namespace univ_dev
 		DWORD									_APIErrorCode;
 		//------------------------------------------------------------------------------------------------
 
-
+		//------------------------------------------------------------------------------------------------
+		// 패킷전용 
 	protected:
 		//임시로 열어둔 패킷풀
-		univ_dev::ObjectFreeList<Packet>		_PacketPool;
-
-		DWORD									_BeginTime;
+		//ObjectFreeList<Packet>*					_PacketPool;
+		//LockFreeMemoryPool<Packet>*				_PacketPool;
+		LockFreeMemoryPoolTLS<Packet>*			_PacketPool;
 	private:
-		
-
-
-
 
 
 		//Debug Field
@@ -185,27 +187,30 @@ namespace univ_dev
 			OFF_FLAG, MAIN_LOOP_FLAG, PACKET_PROCESS_LOOP_FLAG
 		};
 
-		PROFILING_FLAG _ProfilingFlag;
-
+		PROFILING_FLAG							_ProfilingFlag;
+		DWORD									_BeginTime;
+	private:
 		std::unordered_map<DWORD, INT>			_ThreadIdMap;
 
 
 		//총 Send, Recv 동기 처리완료 카운트
-		ULONGLONG								_SendSuccessCount;
-		ULONGLONG								_RecvSuccessCount;
+		alignas(64) ULONGLONG					_SendSuccessCount;
+		alignas(64) ULONGLONG					_RecvSuccessCount;
 		//총 Send, Recv 비동기 처리완료 카운트
-		ULONGLONG								_SendIOPendingCount;
-		ULONGLONG								_RecvIOPendingCount;
+		alignas(64) ULONGLONG					_SendIOPendingCount;
+		alignas(64) ULONGLONG					_RecvIOPendingCount;
 
 		// 패킷 처리 수치 및 패킷처리 완료 바이트수
-		ULONGLONG								_TotalPacket;
-		ULONGLONG								_PacketPerSec;
-		LONGLONG								_TotalProcessedBytes;
+		alignas(64) ULONGLONG					_TotalPacket;
+		alignas(64) ULONGLONG					_PacketPerSec;
+		alignas(64) LONGLONG					_TotalProcessedBytes;
 
 		//Accept Thread에서 사용하는 변수
-		ULONGLONG								_AcceptPerSec;
-		ULONGLONG								_TotalAcceptSession;
-		ULONGLONG								_TotalReleasedSession;
+		alignas(64) ULONGLONG					_AcceptPerSec;
+		alignas(64) ULONGLONG					_TotalAcceptSession;
+		alignas(64) ULONGLONG					_TotalReleasedSession;
+	public:
+		DWORD GetBeginTime()const { return _BeginTime; }
 	};
 }
 

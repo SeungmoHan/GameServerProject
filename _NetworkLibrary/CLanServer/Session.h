@@ -12,7 +12,8 @@ namespace univ_dev
     {
         OVERLAPPED _Overlapped;
         DWORD _IsRecv;
-        univ_dev::RingBuffer _RingBuffer;
+        RingBuffer _RingBuffer;
+        LockFreeQueue<Packet*> _PacketQueue;
     };
 
 
@@ -22,16 +23,18 @@ namespace univ_dev
         JobInfo _SendJob;
         JobInfo _RecvJob;
         
-        DWORD _SendBufferCount;
+        alignas(64) DWORD _SendBufferCount;
+        Packet _SendPacketBuffer[200];
+
         SOCKET _Sock;
         ULONG _SessionIP;
         WCHAR _SessionIPStr[20];
         USHORT _SessionPort;
-        DWORD _IOFlag;
-        DWORD _IOCounts;
         CRITICAL_SECTION _Lock;
+        alignas(64) DWORD _IOCounts;
+        alignas(64) DWORD _IOFlag;
 
-
+        //Debug Field
         SOCKET _LastSock;
         SOCKET _LastSessionID;
     };

@@ -10,7 +10,7 @@ namespace univ_dev
 	{
 		ULONGLONG data;
 		unsigned short packetSize = packet->GetBufferSize();
-		Packet* sendPacket = _PacketPool.Alloc();
+		Packet* sendPacket = _PacketPool->Alloc();
 		sendPacket->Clear();
 		(*packet) >> data;
 		(*sendPacket) << packetSize << data;
@@ -24,7 +24,7 @@ namespace univ_dev
 		tm t;
 		time_t cur = time(nullptr);
 		localtime_s(&t, &cur);
-		DWORD afterBegin = timeGetTime() - _BeginTime;
+		DWORD afterBegin = timeGetTime() - GetBeginTime();
 		_itow_s(t.tm_year+1900, temp, 10);
 		wcscat_s(timeStr, temp);
 		_itow_s(t.tm_mon+1, temp, 10);
@@ -40,7 +40,7 @@ namespace univ_dev
 		while (errorLog == nullptr)
 			fopen_s(&errorLog, "libraryErrorLog.txt", "ab");
 
-		fwprintf(errorLog, L"Server Start At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin / 1000, errorCode, error, GetLastAPIErrorCode());
+		fwprintf(errorLog, L"Error Occured At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin / 1000, errorCode, error, GetLastAPIErrorCode());
 		fclose(errorLog);
 	}
 
@@ -52,7 +52,7 @@ namespace univ_dev
 
 	void EchoServer::OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID)
 	{
-		Packet* loginPacket = _PacketPool.Alloc();
+		Packet* loginPacket = _PacketPool->Alloc();
 		loginPacket->Clear();
 
 		unsigned short payloadSize = 8;

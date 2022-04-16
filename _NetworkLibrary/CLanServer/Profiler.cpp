@@ -36,18 +36,11 @@ namespace univ_dev
 			//찾았을때 있을경우
 			if (GetCurrentThreadId() == samples[currentThreadIdx].threadID && samples[currentThreadIdx].profileSample[i].flag && strcmp(samples[currentThreadIdx].profileSample[i].profileName, name) == 0)
 			{
-				//if (samples[currentThreadIdx].profileSample[i].flag)
-				//{
-				//	if (strcmp(samples[currentThreadIdx].profileSample[i].profileName, name) == 0)
-				//	{
-						if (samples[currentThreadIdx].profileSample[i].startTime.QuadPart != 0)
-						{
-							int* ptr = nullptr;
-							*ptr = 100;
-						}
-				//	}
-				//}
-
+				if (samples[currentThreadIdx].profileSample[i].startTime.QuadPart != 0)
+				{
+					int* ptr = nullptr;
+					*ptr = 100;
+				}
 				QueryPerformanceCounter(&samples[currentThreadIdx].profileSample[i].startTime);
 				break;
 			}
@@ -199,14 +192,14 @@ namespace univ_dev
 						double max0 = (double)((double)samples[i].profileSample[j].max[0] / freq.QuadPart);
 						double max1 = (double)((double)samples[i].profileSample[j].max[1] / freq.QuadPart);
 
-						printf("---------------------------------------------------\n");
-						printf("totalTime : %llf\n", totalTime);
-						printf("totalCallCounts : %lld\n", callCountsExceptMinMax);
-						printf("min1 : %llf\n", min0);
-						printf("min2 : %llf\n", min1);
-						printf("max1 : %llf\n", max0);
-						printf("max2 : %llf\n", max1);
-						printf("---------------------------------------------------\n");
+						//printf("---------------------------------------------------\n");
+						//printf("totalTime : %llf\n", totalTime);
+						//printf("totalCallCounts : %lld\n", callCountsExceptMinMax);
+						//printf("min1 : %llf\n", min0);
+						//printf("min2 : %llf\n", min1);
+						//printf("max1 : %llf\n", max0);
+						//printf("max2 : %llf\n", max1);
+						//printf("---------------------------------------------------\n");
 
 						fprintf(file, "%s,%u,%.10llf,%.10llf,%.10llf,%.10llf,%.10llf,%.10llf,%.10lld\n",
 							samples[i].profileSample[j].profileName,

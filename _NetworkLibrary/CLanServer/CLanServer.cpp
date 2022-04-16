@@ -161,6 +161,7 @@ namespace univ_dev
 		}
 		if (InterlockedExchange(&session->_IOFlag, true) == false)
 		{
+			//int numOfPacket = session->_SendJob._PacketQueue.size();
 			int useSize = session->_SendJob._RingBuffer.GetUseSize();
 			char* readPtr = session->_SendJob._RingBuffer.GetReadPtr();
 			int directDqSize = session->_SendJob._RingBuffer.DirectDequeueSize();
@@ -227,12 +228,14 @@ namespace univ_dev
 	void CLanServer::SendPacket(ULONGLONG sessionID, Packet* packet)
 	{
 		//올바른 세션인지 확인
-		Session* session = this->FindSession(sessionID);
+		//Session* session = this->FindSession(sessionID);
+		Session* session = this->AcquireSession(sessionID);
+
 		if (session == nullptr)
 		{
 			DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"SendPacket -> Invalid SessionID in param API err is session ID");
 			packet->Clear();
-			_PacketPool.Free(packet);
+			_PacketPool->Free(packet);
 			return;
 		}
 		//잠시사이에 세션 ID가 바뀐거라면 이 세션은 이미 Release되었던 세션이라는 의미.
@@ -240,18 +243,19 @@ namespace univ_dev
 		{
 			DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"SendPacket -> session->_SessioID != sessionID(param) API err is session ID");
 			packet->Clear();
-			_PacketPool.Free(packet);
+			_PacketPool->Free(packet);
 			return;
 		}
 		//그게 아니라면 정상 송신
 		packet->AddRef();
+		//session->_RecvJob._PacketQueue.enqueue(packet);
 		int eqRet = session->_SendJob._RingBuffer.Enqueue((const char*)&packet, sizeof(Packet*));
 		if (eqRet != sizeof(Packet*))
 		{
 			DispatchError(dfNCWORKER_SENDQ_IS_FULL, 0, L"send ringbuffer is full");
 			packet->SubRef();
 			packet->Clear();
-			_PacketPool.Free(packet);
+			_PacketPool->Free(packet);
 			DisconnectSession(session);
 			return;
 		}
@@ -262,6 +266,8 @@ namespace univ_dev
 		}
 		else
 			this->SendPost(session);
+
+		this->ReturnSession(sessionID);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -707,7 +713,7 @@ namespace univ_dev
 			}
 			DispatchError(dfNCACCEPT_CLIENT_SOCKET_IS_INVALID_SOCKET, err, L"accept returned and client socket was INVAILD_SOCKET");
 		}
-		if (_MaxSessionCounts <= _SessionMap.size())
+		if (_SessionIdx.size() == 0)
 		{
 			closesocket(clientSocket);
 			DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"session container size is over than max session counts");
@@ -788,15 +794,15 @@ namespace univ_dev
 			if (dqRet != sizeof(Packet*))
 			{
 				DispatchError(dfNCWORKER_PACKET_DQ_LENGTH_NOT_CORRECT, dqRet, L"SendProc -> SendPacket dqRet is not sizeof(Packet*)");
-				CRASH();
+				DisconnectSession(session);
 			}
 			if (packet != nullptr && packet->SubRef())
 			{
 				packet->Clear();
-				this->_PacketPool.Free(packet);
+				this->_PacketPool->Free(packet);
 			}
-			//else
-			//	CRASH();
+			else
+				CRASH();
 		}
 		InterlockedExchange(&session->_IOFlag, false);
 
@@ -830,7 +836,7 @@ namespace univ_dev
 		{
 			InterlockedIncrement(&this->_TotalPacket);
 			InterlockedIncrement(&this->_PacketPerSec);
-			Packet* recvPacket = this->_PacketPool.Alloc();
+			Packet* recvPacket = this->_PacketPool->Alloc();
 			recvPacket->Clear();
 			LANPacketHeader header;
 			if (this->_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
@@ -841,7 +847,7 @@ namespace univ_dev
 				else
 				{
 					recvPacket->Clear();
-					this->_PacketPool.Free(recvPacket);
+					this->_PacketPool->Free(recvPacket);
 					break;
 				}
 			}
@@ -852,13 +858,13 @@ namespace univ_dev
 				else
 				{
 					recvPacket->Clear();
-					this->_PacketPool.Free(recvPacket);
+					this->_PacketPool->Free(recvPacket);
 					break;
 				}
 
 			}
 			recvPacket->Clear();
-			this->_PacketPool.Free(recvPacket);
+			this->_PacketPool->Free(recvPacket);
 		}
 		this->RecvPost(session);
 	}
@@ -1084,7 +1090,7 @@ namespace univ_dev
 			}
 			unsigned long long r_TPS = InterlockedExchange(&this->_PacketPerSec, 0);
 			unsigned long long r_AcceptPS = InterlockedExchange(&this->_AcceptPerSec, 0);
-			printf("\n-------------------------------------------------------------------------\nServerControl\nSaveProfile = \'s\'\nQuitProgram = \'q\'\nChangeProfilingFlag = \'p\'\n-------------------------------------------------------------------------\nNumOfThread = %d\nRunningThread = %d\nCurrentProfilingFlag = %s\nExcuteTime : %llu\nTPS : %llu\nTotalProcessedBytes : %llu\nTotal Packet Process : %llu\ng_SendSuccessCount : %llu\ng_SendIOPendingCount : %llu\ng_RecvSuccessCount : %llu\ng_RecvIOPendingCount : %llu\nMEMORY_FREE_LIST\nPacketPool Capacity : %d\nPacketPool UseCount : %d\nSessionPool Capacity : %d\nSessionPool UseCount : %d\nTotalRemovedSessionCounts :%llu\nTotalAcceptSessionCounts :%llu\nAcceptPerSec : %llu\nSessionMapSize : %llu\n-------------------------------------------------------------------------\n", this->_ThreadPoolSize, this->_RunningThreadCount, str, (now - _BeginTime) / 1000, r_TPS, this->_TotalProcessedBytes, this->_TotalPacket, this->_SendSuccessCount, this->_SendIOPendingCount, this->_RecvSuccessCount, this->_RecvIOPendingCount, this->_PacketPool.GetCapacityCount(), this->_PacketPool.GetUseCount(), this->_SessionPool.GetCapacityCount(), this->_SessionPool.GetUseCount(), this->_TotalReleasedSession, this->_TotalAcceptSession,r_AcceptPS,this->_SessionMap.size());
+			printf("\n-------------------------------------------------------------------------\nServerControl\nSaveProfile = \'s\'\nQuitProgram = \'q\'\nChangeProfilingFlag = \'p\'\n-------------------------------------------------------------------------\nNumOfThread = %d\nRunningThread = %d\nCurrentProfilingFlag = %s\nExcuteTime : %llu\nTPS : %llu\nTotalProcessedBytes : %llu\nTotal Packet Process : %llu\ng_SendSuccessCount : %llu\ng_SendIOPendingCount : %llu\ng_RecvSuccessCount : %llu\ng_RecvIOPendingCount : %llu\nMEMORY_FREE_LIST\nPacketPool Capacity : %d\nPacketPool UseCount : %d\nTotal Packet Use Count : %d\nSessionPool Capacity : %llu\nSessionPool UseCount : %d\nTotalRemovedSessionCounts :%llu\nTotalAcceptSessionCounts :%llu\nAcceptPerSec : %llu\n-------------------------------------------------------------------------\n", this->_ThreadPoolSize, this->_RunningThreadCount, str, (now - _BeginTime) / 1000, r_TPS, this->_TotalProcessedBytes, this->_TotalPacket, this->_SendSuccessCount, this->_SendIOPendingCount, this->_RecvSuccessCount, this->_RecvIOPendingCount, this->_PacketPool->GetCapacityCount(), this->_PacketPool->GetUseCount(), this->_PacketPool->GetTotalUseCount(), this->_MaxSessionCounts, (int)(this->_MaxSessionCounts - this->_SessionIdx.GetUseCount()), this->_TotalReleasedSession, this->_TotalAcceptSession, r_AcceptPS/*, this->_SessionMap.size()*/);
 			int cnt = 0;
 			for (auto iter = this->_ThreadIdMap.begin(); iter != this->_ThreadIdMap.end(); ++iter)
 			{
@@ -1107,13 +1113,14 @@ namespace univ_dev
 		//정리 작업
 		CloseHandle(this->_IOCP);
 		CloseHandle(this->_RunningEvent);
-		for (auto iter = this->_SessionMap.begin(); iter != this->_SessionMap.end(); ++iter)
-		{
-			closesocket(iter->second->_Sock);
-			this->_SessionPool.Free(iter->second);
-		}
-		this->_SessionMap.clear();
+		//for (auto iter = this->_SessionMap.begin(); iter != this->_SessionMap.end(); ++iter)
+		//{
+		//	ReleaseSession(iter->second->_SessionID);
+		//}
+		//this->_SessionMap.clear();
 		DeleteCriticalSection(&this->_SessionMapLock);
+		//delete this->_TLSPacketPool;
+		delete this->_PacketPool;
 		delete[] this->_WorkerThreads;
 		InterlockedExchange(&this->_ServerOnFlag, false);
 		WSACleanup();
@@ -1127,16 +1134,18 @@ namespace univ_dev
 	// 세션 찾기
 	Session* CLanServer::FindAndLockSession(ULONGLONG key)
 	{
-		this->SessionMapLock();
-		auto iter = this->_SessionMap.find(key);
-		if (iter == this->_SessionMap.end())
-		{
-			this->SessionMapUnlock();
-			return nullptr;
-		}
-		Session* session = iter->second;
-		this->LockSession(session);
-		this->SessionMapUnlock();
+		DWORD sessionIdx = key & 0xffff;
+		Session* session = &_SessionArr[sessionIdx];
+		//this->SessionMapLock();
+		//auto iter = this->_SessionMap.find(key);
+		//if (iter == this->_SessionMap.end())
+		//{
+		//	this->SessionMapUnlock();
+		//	return nullptr;
+		//}
+		//Session* session = iter->second;
+		//this->LockSession(session);
+		//this->SessionMapUnlock();
 		return session;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1144,15 +1153,17 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	Session* CLanServer::FindSession(ULONGLONG sessionID)
 	{
-		this->SessionMapLock();
-		auto iter = this->_SessionMap.find(sessionID);
-		if (iter == this->_SessionMap.end())
-		{
-			this->SessionMapUnlock();
-			return nullptr;
-		}
-		Session* session = iter->second;
-		this->SessionMapUnlock();
+		DWORD sessionIdx = sessionID & 0xffff;
+		Session* session = &_SessionArr[sessionIdx];
+		//this->SessionMapLock();
+		//auto iter = this->_SessionMap.find(sessionID);
+		//if (iter == this->_SessionMap.end())
+		//{
+		//	this->SessionMapUnlock();
+		//	return nullptr;
+		//}
+		//Session* session = iter->second;
+		//this->SessionMapUnlock();
 
 		return session;
 	}
@@ -1185,11 +1196,46 @@ namespace univ_dev
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 
+
 	//---------------------------------------------------------------------------------------------------------------------------------
 	void CLanServer::UnlockSession(Session* session)
 	{
 		if (session == nullptr) return;
 		LeaveCriticalSection(&session->_Lock);
+	}
+	Session* CLanServer::AcquireSession(ULONGLONG sessionID)
+	{
+		Session* session = FindSession(sessionID);
+
+		DWORD IOCount = InterlockedIncrement(&session->_IOCounts);
+		if ((IOCount & 0x80000000) == true)
+		{
+			InterlockedDecrement(&session->_IOCounts);
+			return nullptr;
+		}
+		if (session->_SessionID != sessionID)
+		{
+			DWORD ret = InterlockedDecrement(&session->_IOCounts);
+			if (ret == 0)
+				ReleaseSession(session->_SessionID);
+			return nullptr;
+		}
+		return session;
+	}
+	void CLanServer::ReturnSession(ULONGLONG sessionID)
+	{
+		Session* session = FindSession(sessionID);
+		if (session == nullptr)	return;
+		DWORD ret = InterlockedDecrement(&session->_IOCounts);
+		if (ret == 0)
+			ReleaseSession(session->_SessionID);
+	}
+	void CLanServer::ReturnSession(Session* session)
+	{
+		if (session == nullptr) return;
+		DWORD ret = InterlockedDecrement(&session->_IOCounts);
+		if (ret == 0)
+			ReleaseSession(session->_SessionID);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1200,10 +1246,10 @@ namespace univ_dev
 	// 세션 생성 함수
 	Session* CLanServer::CreateSession(SOCKET sock, sockaddr_in clientaddr, ULONGLONG sessionID)
 	{
-		//DWORD idx;
-		//this->PopSessionIndex(idx);
-		Session* newSession = this->_SessionPool.Alloc();
-		//Session* newSession = &this->_SessionArr[idx];
+		DWORD idx;
+		this->PopSessionIndex(idx);
+		//Session* newSession = this->_SessionPool.Alloc();
+		Session* newSession = &this->_SessionArr[idx];
 		if (newSession == nullptr)
 		{
 			this->DispatchError(dfNCACCEPT_SESSION_POOL_NO_MEMORY, 0, L"session pool can not alloc no memory");
@@ -1214,14 +1260,14 @@ namespace univ_dev
 		newSession->_SessionPort = ntohs(clientaddr.sin_port);
 		ZeroMemory(newSession->_SessionIPStr, sizeof(newSession->_SessionIPStr));
 		this->GetStringIP(newSession->_SessionIPStr, 20, clientaddr);
-		newSession->_IOCounts = 0;
+		//newSession->_IOCounts &= 0x7fffffff;
 		newSession->_IOFlag = false;
 		newSession->_Sock = sock;
 
 		if (newSession->_SessionID != 0)
 			this->DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, 0, L"last free session was not cleaned up");
-		//newSession->_SessionID = (sessionID << 16) + idx;
-		newSession->_SessionID = sessionID;
+		newSession->_SessionID = (sessionID << 16) + idx;
+		//newSession->_SessionID = sessionID;
 
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
@@ -1229,9 +1275,9 @@ namespace univ_dev
 		newSession->_SendJob._RingBuffer.ClearBuffer();
 		ZeroMemory(&newSession->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 		ZeroMemory(&newSession->_SendJob._Overlapped, sizeof(OVERLAPPED));
-		this->SessionMapLock();
-		this->_SessionMap.emplace(std::make_pair(newSession->_SessionID, newSession));
-		this->SessionMapUnlock();
+		//this->SessionMapLock();
+		//this->_SessionMap.emplace(std::make_pair(newSession->_SessionID, newSession));
+		//this->SessionMapUnlock();
 		CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession, 0);
 		return newSession;
 	}
@@ -1243,21 +1289,21 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	bool CLanServer::PopSessionIndex(DWORD & ret)
 	{
-		SessionMapLock();
-		ret = _SessionIdx.top();
-		_SessionIdx.pop();
-		SessionMapUnlock();
-		return true;
+		//SessionMapLock();
+		return _SessionIdx.pop(ret);
+		//SessionMapUnlock();
+		//return true;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	void CLanServer::PushSessionIndex(DWORD idx)
 	{
-		SessionMapLock();
-		_SessionIdx.push(idx);
-		SessionMapUnlock();
+		//SessionMapLock();
+		return _SessionIdx.push(idx);
+		//SessionMapUnlock();
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
+
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1270,20 +1316,26 @@ namespace univ_dev
 			CRASH();
 			return;
 		}
-		//DWORD idx = sessionID & 0xffff;
 		//Session* removeSession = &this->_SessionArr[idx];
-		this->SessionMapLock();
-		auto iter = this->_SessionMap.find(sessionID);
-		if (iter == this->_SessionMap.end())
-		{
-			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"ReleaseSession -> Invalid Session Iter API err is session id");
-			this->DispatchError(sessionID, GetCurrentThreadId(), L"Session, ThreadID");
-			this->SessionMapUnlock();
+		DWORD idx = sessionID & 0xffff;
+		Session* removeSession = this->FindSession(sessionID);
+		DWORD curIOCount = removeSession->_IOCounts;
+		DWORD removeSessionFlag = curIOCount | 0x80000000;
+
+		if (InterlockedCompareExchange(&removeSession->_IOCounts, removeSessionFlag, curIOCount) != curIOCount)
 			return;
-		}
-		Session* removeSession = iter->second;
-		this->_SessionMap.erase(sessionID);
-		this->SessionMapUnlock();
+		//this->SessionMapLock();
+		//auto iter = this->_SessionMap.find(sessionID);
+		//if (iter == this->_SessionMap.end())
+		//{
+		//	this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"ReleaseSession -> Invalid Session Iter API err is session id");
+		//	this->DispatchError(sessionID, GetCurrentThreadId(), L"Session, ThreadID");
+		//	this->SessionMapUnlock();
+		//	return;
+		//}
+		//Session* removeSession = iter->second;
+		//this->_SessionMap.erase(sessionID);
+		//this->SessionMapUnlock();
 
 
 		if (removeSession->_SessionID != sessionID)
@@ -1313,16 +1365,12 @@ namespace univ_dev
 			if (packet != nullptr && packet->SubRef())
 			{
 				packet->Clear();
-				this->_PacketPool.Free(packet);
+				this->_PacketPool->Free(packet);
 			}
-			else
-				CRASH();
 		}
 
-		if (removeSession->_IOCounts != 0)
-		{
-			CRASH();
-		}
+		//if (removeSession->_IOCounts != 0)
+		//	CRASH();
 
 		SOCKET sock = InterlockedExchange(&removeSession->_Sock, 0);
 		if (sock != 0)
@@ -1330,15 +1378,13 @@ namespace univ_dev
 			removeSession->_LastSock = sock;
 			closesocket(sock);
 		}
+		removeSession->_IOCounts &= 0x7fffffff;
 		removeSession->_IOFlag = false;
 		removeSession->_SendBufferCount = 0;
 		removeSession->_SendJob._RingBuffer.ClearBuffer();
 		removeSession->_RecvJob._RingBuffer.ClearBuffer();
-		DeleteCriticalSection(&removeSession->_Lock);
-		//this->SessionMapLock();
-		//this->PushSessionIndex(idx);
-		//this->SessionMapUnlock();
-		this->_SessionPool.Free(removeSession);
+
+		this->PushSessionIndex(idx);
 		this->OnClientLeave(sessionID);
 		InterlockedIncrement(&_TotalReleasedSession);
 		return;
@@ -1352,7 +1398,7 @@ namespace univ_dev
 	// 연결 종료 함수
 	void CLanServer::DisconnectSession(ULONGLONG sessionID)
 	{
-		Session* disconnectSession = this->FindSession(sessionID);
+		Session* disconnectSession = this->AcquireSession(sessionID);
 		if (disconnectSession == nullptr)
 		{
 			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"DisconnectSession -> Invalid Session Iter API err is session id");
@@ -1363,7 +1409,8 @@ namespace univ_dev
 			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"DisconnectSession -> Invalid SessionID in param API err is session id");
 			return;
 		}
-		int r = CancelIoEx((HANDLE)disconnectSession->_Sock, nullptr);
+		CancelIoEx((HANDLE)disconnectSession->_Sock, nullptr);
+		ReturnSession(sessionID);
 		//int err = GetLastError();
 		//printf("R %d Err : %d\n", r, err);
 	}
@@ -1380,7 +1427,7 @@ namespace univ_dev
 			//this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"DisconnectSession -> Session->_SessionID == 0");
 			return;
 		}
-		int r = CancelIoEx((HANDLE)session->_Sock, nullptr);
+		CancelIoEx((HANDLE)session->_Sock, nullptr);
 		//int err = GetLastError();
 		//printf("R %d Err : %d\n", r,err);
 	}
@@ -1394,7 +1441,7 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// 생성자 소멸자
 	CLanServer::CLanServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts)
-		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _PacketPerSec{ 0 }, _RecvIOPendingCount{ 0 }, _RecvSuccessCount{ 0 }, _SendIOPendingCount{ 0 }, _SendSuccessCount{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _LogThread{ nullptr }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _ProfilingFlag{ PROFILING_FLAG::OFF_FLAG }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 }, _NagleOff{ nagleOff }, _MaxSessionCounts{ maxSessionCounts }, _AcceptPerSec{ 0 }, _SessionArr{ nullptr }
+		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _PacketPerSec{ 0 }, _RecvIOPendingCount{ 0 }, _RecvSuccessCount{ 0 }, _SendIOPendingCount{ 0 }, _SendSuccessCount{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _LogThread{ nullptr }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _ProfilingFlag{ PROFILING_FLAG::OFF_FLAG }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 }, _NagleOff{ nagleOff }, _MaxSessionCounts{ maxSessionCounts }, _AcceptPerSec{ 0 }, _SessionArr{ nullptr },_PacketPool(new LockFreeMemoryPoolTLS<Packet>())
 	{
 		this->CLanServerStartup();
 	}

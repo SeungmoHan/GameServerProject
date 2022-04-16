@@ -8,11 +8,13 @@
 #include <WS2tcpip.h>
 #include <Windows.h>
 
-#include "ObjectFreeList.hpp"
+#include "DumpClass.h"
 #include "profiler.h"
 #include "RingBuffer.h"
 #include "SerializingBuffer.h"
-#include "DumpClass.h"
+#include "LockFreeQueue.hpp"
+#include "LockFreeStack.hpp"
+#include "LockFreeMemoryPoolTLS.hpp"
 
 #define CRASH() do{int*ptr =nullptr; *ptr =100;}while(0)
 

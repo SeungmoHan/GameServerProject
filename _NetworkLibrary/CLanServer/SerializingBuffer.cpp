@@ -21,7 +21,11 @@ namespace univ_dev
 	void Packet::Clear()
 	{
 		_WritePointer = _ReadPointer = _Begin;
-		_RefCount = 0;
+		if (_RefCount != 0)
+		{
+			int* ptr = nullptr;
+			*ptr = 100;
+		}
 	}
 
 	int Packet::GetBufferSize()
