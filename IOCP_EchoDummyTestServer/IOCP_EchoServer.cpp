@@ -9,11 +9,12 @@ namespace univ_dev
 	void EchoServer::OnRecv(ULONGLONG sessionID, Packet* packet)
 	{
 		ULONGLONG data;
-		unsigned short packetSize = packet->GetBufferSize();
-		Packet* sendPacket = _PacketPool->Alloc();
-		sendPacket->Clear();
+		unsigned short packetSize = 8;
+		PRO_BEGIN("Alloc");
+		Packet* sendPacket = Packet::Alloc();
+		PRO_END("Alloc");
 		(*packet) >> data;
-		(*sendPacket) << packetSize << data;
+		(*sendPacket) << data;
 		SendPacket(sessionID, sendPacket);
 	}
 
@@ -52,12 +53,11 @@ namespace univ_dev
 
 	void EchoServer::OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID)
 	{
-		Packet* loginPacket = _PacketPool->Alloc();
-		loginPacket->Clear();
+		Packet* loginPacket = Packet::Alloc();
 
 		unsigned short payloadSize = 8;
 		ULONGLONG data = 0x7fffffffffffffff;
-		(*loginPacket) << payloadSize << data;
+		(*loginPacket) << data;
 		SendPacket(sessionID, loginPacket);
 	}
 
