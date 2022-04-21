@@ -2,9 +2,9 @@
 #ifndef __RING_BUFFER_HEADER__
 #define __RING_BUFFER_HEADER__
 #define __UNIV_DEVELOPER_
+
 #include <Windows.h>
-#define CRASH() int*ptr=nullptr;\
-*ptr=100
+
 
 namespace univ_dev
 {
@@ -15,7 +15,6 @@ namespace univ_dev
 		RingBuffer();
 		RingBuffer(int bufferSize);
 		~RingBuffer();
-		//bool ReSize(int size);
 		int GetBufferSize();
 
 		int GetUseSize();
@@ -32,8 +31,8 @@ namespace univ_dev
 		void MoveReadPtr(int size);
 
 		void ClearBuffer();
-		int GetReadPtrPosition() { return readPointer - begin; }
-		int GetWritePtrPosition() { return writePointer - begin; }
+		int GetReadPtrPosition() { return _ReadPointer - _Begin; }
+		int GetWritePtrPosition() { return _WritePointer - _Begin; }
 		char* GetWritePtr();
 		char* GetReadPtr();
 		char* GetBeginPtr();
@@ -43,12 +42,12 @@ namespace univ_dev
 
 	private:
 		void MoveTempPtr(int size, char** tempPtr);
-		char* begin;
-		char* end;
-		char* readPointer;
-		char* writePointer;
-		SRWLOCK lock;
-		int ringBufferSize;
+		char* _Begin;
+		char* _End;
+		char* _ReadPointer;
+		char* _WritePointer;
+		SRWLOCK _Lock;
+		int _RingBufferSize;
 	};
 }
 

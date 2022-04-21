@@ -9,6 +9,7 @@
 #define ACCEPT_THREAD_COUNT (size_t)1
 #define MONITERING_THREAD_COUNT (size_t)1
 
+#define dfTEST_ERROR_GENERATOR_CODE 44444
 
 //---------------------------------------------------------------
 // NetCore Initialize Failed Error Code
@@ -26,6 +27,7 @@
 #define dfNCINIT_LISTEN_SOCKET_CREATE_FAILED 8004
 
 #define dfNCINIT_SOCKET_BIND_FAILED 8005
+#define dfNCINIT_SOCKET_CONNECT_FAILED 8005
 
 #define dfNCINIT_SOCKET_LISTEN_FAILED 8006
 
@@ -34,9 +36,32 @@
 #define dfNCINIT_RUNNING_EVENT_CREATE_FAILED 8008
 
 //---------------------------------------------------------------
+// NetCore AcceptThread Error Code
 
+#define dfNCACCEPT_CLIENT_SOCKET_IS_INVALID_SOCKET 1000
 
+#define dfNCACCEPT_SESSION_POOL_NO_MEMORY 1001
 
+#define dfNCACCEPT_SESSION_COUNTS_OVER 1002
 
+#define dfNCACCEPT_SESSION_ID_NOT_CLEANUP 1003
 
+//---------------------------------------------------------------
+// NetCore WorkerThread Error Code
+
+#define dfNCWORKER_OVERLAPPED_IS_NULL 1100
+
+#define dfNCWORKER_USE_SIZE_OVER_HEADER_SIZE_AND_FIRST_PEEK_ZERO 1101
+#define dfNCWORKER_USE_SIZE_OVER_PAYLOAD_SIZE_AND_SECOND_PEEK_ZERO 1102
+
+#define dfNCWORKER_WSARECV_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING 1103
+#define dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING 1104
+
+#define dfNCWORKER_INVALID_SESSION_ID 1105
+
+#define dfNCWORKER_SENDQ_IS_FULL 1106
+
+#define dfNCWORKER_SESSION_SOCK_ZERO 1107
+
+#define dfNCWORKER_PACKET_DQ_LENGTH_NOT_CORRECT 1108
 #endif // !__NET_CORE_ERROR_DEFINE__

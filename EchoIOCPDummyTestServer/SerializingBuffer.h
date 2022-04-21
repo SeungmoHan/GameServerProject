@@ -1,58 +1,76 @@
 #pragma once
 #ifndef __SERIALIZEING_BUFFER_HEADER__
 #define __SERIALIZEING_BUFFER_HEADER__
-#include "BaseCore.h"
+#define __UNIV_DEVELOPER_
 
 namespace univ_dev
 {
+#pragma pack(push,1)
+	struct LanServerPacket
+	{
+		unsigned short _Len;
+	};
+	struct NetServerPacket
+	{
+		unsigned char _ByteCode;
+		unsigned short _Len;
+		unsigned char _RandomKey;
+		unsigned char _CheckSum;
+	};
+#pragma pack(pop)
+
+#define LAN_HEADER_SIZE (short)sizeof(LanServerPacket)
+#define NET_HEADER_SIZE (short)sizeof(NetServerPacket)
+
 	class Packet
 	{
-	private:
+	protected:
 		static constexpr int MSS = 1460;
-	public:
+		static constexpr int PACKET_CODE = 0x77;
+		static constexpr int FIXED_KEY = 0xa9;
+
+		friend class CLanServer;
+		friend class CNetServer;
 		enum PacketSize
 		{
 			DefaultSize = MSS
 		};
+	public:
 		Packet();
 		Packet(int bufferSize);
 
 		virtual ~Packet();
+	protected:
 		void Release();
 
 		void Clear();
+
 		int GetBufferSize();
 		char* GetReadPtr();
 		char* GetWritePtr();
+		char* GetBeginPtr();
+		void AddRef();
+		bool SubRef();
+
+		void SetLanHeader();
+		void SetNetHeader();
+		void Encode();
+		void Decode();
+		bool VerifyCheckSum();
+
+		int GetRefCount() { return _RefCount; }
 
 		int MoveWritePtr(int size);
 		int MoveReadPtr(int size);
+	public:
 
-		//template<typename T>
-		//Packet& operator<<(T value)
-		//{
-		//	if (writePointer + (sizeof(value) - 1) >= end)
-		//	{
-		//		throw std::exception("need more memory");
-		//	}
-		//	T* tempPtr = (T*)writePointer;
-		//	*tempPtr = value;
-		//	MoveWritePtr(sizeof(value));
-		//	return *this;
-		//}
-		//template<typename T>
-		//Packet& operator>>(T& value)
-		//{
-		//	if (readPointer + sizeof(value) - 1 >= end)
-		//	{
-		//		throw std::exception("cant read");
-		//	}
-		//	T* tempPtr = (T*)readPointer;
-		//	value = *tempPtr;
-		//	MoveReadPtr(sizeof(value));
-		//	return *this;
-		//}
+		static int GetUseCount();
+		static int GetTotalPacketCount();
+		static int GetCapacityCount();
+		static Packet* Alloc();
+		static void Free(Packet* packet);
 
+		void PutString(const char* str, int size);
 		Packet& operator=(const Packet& other);
 		Packet& operator>>(unsigned char& value);
 		Packet& operator>>(char& value);
@@ -83,14 +101,15 @@ namespace univ_dev
 		Packet& operator<<(unsigned __int64 value);
 		Packet& operator<<(double value);
 	protected:
-		char* begin;
-		char* end;
-		char* writePointer;
-		char* readPointer;
+		char* _Begin;
+		char* _End;
+		char* _WritePointer;
+		char* _ReadPointer;
 
-		int bufferSize;
+		int _RefCount;
+
+		int _BufferSize;
 	};
-	extern ObjectFreeList<Packet> g_PacketObjectPool;
 }
 
 
