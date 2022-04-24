@@ -11,6 +11,18 @@ namespace univ_dev
 	{
 	public:
 		EchoServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts);
+		~EchoServer()
+		{
+			Close();
+		}
+	private:
+		void Start();
+		void Close();
+		friend unsigned __stdcall MoniteringThread(void* param);
+
+		unsigned int EchoServerMoniteringThread(void* param);
+
+		HANDLE _MoniteringThread;
 
 		void OnRecv(ULONGLONG sessionID, Packet* recvPacket) override;
 		void OnErrorOccured(DWORD errorCode,const WCHAR* error) override;

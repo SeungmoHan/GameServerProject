@@ -48,11 +48,11 @@ namespace univ_dev
 		// _beginthreadex함수에 전달되는 함수포인터들 param 은 this
 		friend unsigned __stdcall WorkerThread		(void* param);
 		friend unsigned __stdcall AcceptThread		(void* param);
-		friend unsigned __stdcall MoniteringThread	(void* param);
+		//friend unsigned __stdcall MoniteringThread	(void* param);
 		// 실제 러닝 스레드들이 호출할 함수들
 		unsigned int CLanServerWorkerThread			(void* param);
 		unsigned int CLanServerAcceptThread			(void* param);
-		unsigned int CLanServerMoniteringThread		(void* param);
+		//unsigned int CLanServerMoniteringThread		(void* param);
 		//------------------------------------------------------------------------------------------------
 
 
@@ -64,6 +64,9 @@ namespace univ_dev
 		virtual void OnClientJoin			(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID) = 0;
 		virtual void OnClientLeave			(ULONGLONG sessionID) = 0; // Release후 호출
 
+	protected:
+		void PostLanServerStop();
+	private:
 		//------------------------------------------------------------------------------------------------
 		//에러가 있을때 마지막 에러코드를 저장하고 OnErrorOccured함수 호출
 		void		DispatchError			(DWORD errorCode,DWORD APIErrorCode,const WCHAR* error);
@@ -87,7 +90,7 @@ namespace univ_dev
 		// Accept 수행후 수행 불가능이면 clientSocket이 INVALID_SOCKET임, false 반환시에는 AcceptThread 종료
 		BOOL		TryAccept				(SOCKET& clientSocket, sockaddr_in& clientAddr);
 		// 하나의 완성된 패킷을 얻어내는 함수
-		BOOL		TryGetCompletedPacket	(Session* session, Packet* packet, LanServerPacket& header);
+		BOOL		TryGetCompletedPacket	(Session* session, Packet* packet, LanServerHeader& header);
 
 
 		//------------------------------------------------------------------------------------------------
@@ -183,7 +186,27 @@ namespace univ_dev
 
 		PROFILING_FLAG							_ProfilingFlag;
 		ULONGLONG								_BeginTime;
-	private:
+	protected:
+		struct MoniteringInfo
+		{
+			DWORD _WorkerThreadCount;
+			DWORD _RunningThreadCount;
+			//ULONGLONG _SendSuccessCount;
+			//ULONGLONG _RecvSuccessCount;
+			//ULONGLONG _SendIOPendingCount;
+			//ULONGLONG _RecvIOPendingCount;
+			ULONGLONG _TotalPacket;
+			ULONGLONG _TotalProecessedBytes;
+			ULONGLONG _TotalAcceptSession;
+			ULONGLONG _TotalReleaseSession;
+			ULONGLONG _SendPacketPerSec;
+			//마지막 GetMoniteringInfo 이후 PacketCount;
+			ULONGLONG _RecvPacketCount;
+			ULONGLONG _SendPacketCount;
+			//마지막 GetMoniteringInfo 이후 AcceptCount;
+			ULONGLONG _AccpeptCount;
+		};
+
 		std::unordered_map<DWORD, INT>			_ThreadIdMap;
 
 
@@ -196,13 +219,17 @@ namespace univ_dev
 
 		// 패킷 처리 수치 및 패킷처리 완료 바이트수
 		alignas(64) ULONGLONG					_TotalPacket;
-		alignas(64) ULONGLONG					_PacketPerSec;
+		alignas(64) ULONGLONG					_RecvPacketPerSec;
+		alignas(64) ULONGLONG					_SendPacketPerSec;
+
 		alignas(64) LONGLONG					_TotalProcessedBytes;
 
 		//Accept Thread에서 사용하는 변수
 		alignas(64) ULONGLONG					_AcceptPerSec;
 		alignas(64) ULONGLONG					_TotalAcceptSession;
 		alignas(64) ULONGLONG					_TotalReleasedSession;
+
+		MoniteringInfo GetMoniteringInfo();
 	public:
 		DWORD GetBeginTime()const { return _BeginTime; }
 	};

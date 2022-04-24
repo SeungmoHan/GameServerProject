@@ -37,13 +37,13 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//Monitering Thread Warpping function
 	// param CLanServer*
-	unsigned __stdcall MoniteringThread(void* param)
-	{
-		//MoniteringThread -> NetCore::Run 이 호출될때까지 막혀있다가 NetCore::Run이 호출되어야 시작
-		CLanServer* core = (CLanServer*)param;
-		WaitForSingleObject(core->_RunningEvent, INFINITE);
-		return core->CLanServerMoniteringThread(param);
-	}
+	//unsigned __stdcall MoniteringThread(void* param)
+	//{
+	//	//MoniteringThread -> NetCore::Run 이 호출될때까지 막혀있다가 NetCore::Run이 호출되어야 시작
+	//	CLanServer* core = (CLanServer*)param;
+	//	WaitForSingleObject(core->_RunningEvent, INFINITE);
+	//	return core->CLanServerMoniteringThread(param);
+	//}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -109,7 +109,7 @@ namespace univ_dev
 					packet = nullptr;
 					if (!session->_SendPacketQueue.dequeue(packet)) CRASH();
 					session->_SendPacketBuffer[i] = packet;
-					sendWSABuf[i].buf = packet->GetReadPtr();
+					sendWSABuf[i].buf = (char*)packet->GetReadPtr();
 					sendWSABuf[i].len = packet->GetBufferSize();
 				}
 
@@ -151,7 +151,9 @@ namespace univ_dev
 	void CLanServer::SendPacket(ULONGLONG sessionID, Packet* packet)
 	{
 		//올바른 세션인지 확인
+		packet->AddRef();
 		Session* session = this->AcquireSession(sessionID);
+		InterlockedIncrement(&this->_SendPacketPerSec);
 		if (session == nullptr)
 		{
 			this->DispatchError(dfNCWORKER_INVALID_SESSION_ID, sessionID, L"SendPacket -> Invalid SessionID in param API err is session ID");
@@ -163,13 +165,7 @@ namespace univ_dev
 		//그게 아니라면 정상 송신
 		packet->SetLanHeader();
 		session->_SendPacketQueue.enqueue(packet);
-		if (_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
-		{
-			Profiler profiler("SendPost2");
-			this->SendPost(session);
-		}
-		else
-			this->SendPost(session);
+		this->SendPost(session);
 		this->ReturnSession(sessionID);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -193,15 +189,14 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// 모든 스레드들이 작업이 끝날때까지 대기하는 메인스레드
-		HANDLE* runningThreads = new HANDLE[(size_t)this->_ThreadPoolSize + ACCEPT_THREAD_COUNT + MONITERING_THREAD_COUNT];
+		HANDLE* runningThreads = new HANDLE[(size_t)this->_ThreadPoolSize + ACCEPT_THREAD_COUNT];
 
 		for (int i = 0; i < (int)this->_ThreadPoolSize; i++)
 			runningThreads[i] = this->_WorkerThreads[i];
 
 		runningThreads[this->_ThreadPoolSize] = this->_AcceptThread;
-		runningThreads[this->_ThreadPoolSize + 1] = this->_LogThread;
 
-		WaitForMultipleObjects(this->_ThreadPoolSize + ACCEPT_THREAD_COUNT + MONITERING_THREAD_COUNT, runningThreads, true, INFINITE);
+		WaitForMultipleObjects(this->_ThreadPoolSize + ACCEPT_THREAD_COUNT, runningThreads, true, INFINITE);
 
 		delete[] runningThreads;
 		// --------------------------------------------------------------------------------------------------------------
@@ -248,6 +243,12 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 
 
+
+	void CLanServer::PostLanServerStop()
+	{
+		this->_ShutDownFlag = true;
+		closesocket(this->_ListenSocket);
+	}
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -395,19 +396,19 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// 초단위 로깅용 스레드 생성
-		printf("PrintThread CreateBegin\n");
-		fprintf(MainThreadLogFile, "PrintThread CreateBegin\n");
-		this->_LogThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
-		if (this->_LogThread == nullptr)
-		{
-			InterlockedExchange(&this->_ServerOnFlag, false);
-			this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
-			this->_APIErrorCode = GetLastError();
-			return;
-		}
-		fprintf(MainThreadLogFile, "PrintThread CreateEnd\n");
-		printf("PrintThread CreateEnd\n");
-		fflush(MainThreadLogFile);
+		//printf("PrintThread CreateBegin\n");
+		//fprintf(MainThreadLogFile, "PrintThread CreateBegin\n");
+		//this->_LogThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
+		//if (this->_LogThread == nullptr)
+		//{
+		//	InterlockedExchange(&this->_ServerOnFlag, false);
+		//	this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
+		//	this->_APIErrorCode = GetLastError();
+		//	return;
+		//}
+		//fprintf(MainThreadLogFile, "PrintThread CreateEnd\n");
+		//printf("PrintThread CreateEnd\n");
+		//fflush(MainThreadLogFile);
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
@@ -632,18 +633,8 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// if this function returns false there's no data in packet
-	BOOL CLanServer::TryGetCompletedPacket(Session* session, Packet* packet, LanServerPacket& header)
+	BOOL CLanServer::TryGetCompletedPacket(Session* session, Packet* packet, LanServerHeader& header)
 	{
-		//if (session->_SessionID == 0)
-		//{
-		//	DispatchError(dfNCWORKER_INVALID_SESSION_ID, session->_SessionID, L"TryGetCompletedPacket -> session id is zero");
-		//	return false;
-		//}
-		//if (session->_Sock == 0)
-		//{
-		//	DispatchError(dfNCWORKER_SESSION_SOCK_ZERO, 0, L"TryGetCompletedPacket -> session sock is zero");
-		//	return false;
-		//}
 		//링버퍼의 현재 사이즈가 헤더의 길이보다 작으면 더이상 뽑을게 없다는 의미임.
 		if (session->_RingBuffer.GetUseSize() < LAN_HEADER_SIZE) return false;
 		
@@ -661,7 +652,7 @@ namespace univ_dev
 		//recv 링버퍼에서 데이터를 꺼냈으니 ReadPointer를 증가시켜서 UseSize를 줄여야함.
 		session->_RingBuffer.MoveReadPtr(pkRet1);
 		
-		int pkRet2 = session->_RingBuffer.Peek(packet->GetWritePtr(), header._Len);
+		int pkRet2 = session->_RingBuffer.Peek((char*)packet->GetWritePtr(), header._Len);
 		if (pkRet2 != header._Len)
 		{
 			DispatchError(dfNCWORKER_USE_SIZE_OVER_PAYLOAD_SIZE_AND_SECOND_PEEK_ZERO, 0, L"ringbuffer use size was over than header + payloadsize but peek ret is zero");
@@ -699,15 +690,7 @@ namespace univ_dev
 		}
 		InterlockedExchange(&session->_IOFlag, false);
 		if (session->_SendPacketQueue.size() > 0)
-		{
-			if (_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
-			{
-				Profiler profiler("SendPost");
-				this->SendPost(session);
-			}
-			else
-				this->SendPost(session);
-		}
+			this->SendPost(session);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -725,37 +708,22 @@ namespace univ_dev
 		while (true)
 		{
 			InterlockedIncrement(&this->_TotalPacket);
-			InterlockedIncrement(&this->_PacketPerSec);
+			InterlockedIncrement(&this->_RecvPacketPerSec);
 
 			PRO_BEGIN("Alloc");
 			Packet* recvPacket = Packet::Alloc();
+			recvPacket->AddRef();
 			recvPacket->MoveReadPtr(NET_HEADER_SIZE);
 			PRO_END("Alloc");
-			LanServerPacket header;
-			if (this->_ProfilingFlag >= PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG)
-			{
-				Profiler packetProcessProfiler("Packet Process Profiler");
-				if (this->TryGetCompletedPacket(session, recvPacket, header))
-					this->OnRecv(session->_SessionID, recvPacket);
-				else
-				{
-					PRO_BEGIN("Free");
-					Packet::Free(recvPacket);
-					PRO_END("Free");
-					break;
-				}
-			}
+			LanServerHeader header;
+			if (this->TryGetCompletedPacket(session, recvPacket, header))
+				this->OnRecv(session->_SessionID, recvPacket);
 			else
 			{
-				if (this->TryGetCompletedPacket(session, recvPacket, header))
-					this->OnRecv(session->_SessionID, recvPacket);
-				else
-				{
-					PRO_BEGIN("Free");
-					Packet::Free(recvPacket);
-					PRO_END("Free");
-					break;
-				}
+				PRO_BEGIN("Free");
+				Packet::Free(recvPacket);
+				PRO_END("Free");
+				break;
 			}
 			PRO_BEGIN("Free");
 			Packet::Free(recvPacket);
@@ -886,26 +854,12 @@ namespace univ_dev
 			//recv 완료처리라면
 			if (GQCSRet != 0 && byteTransfered != 0 && job->_IsRecv)
 			{
-				//if (session->_SessionID != sessionID) continue;
-				if (_ProfilingFlag >= PROFILING_FLAG::MAIN_LOOP_FLAG)
-				{
-					Profiler profile("RecvProc");
-					this->RecvProc(session, byteTransfered);
-				}
-				else
-					this->RecvProc(session, byteTransfered);
+				this->RecvProc(session, byteTransfered);
 			}
 			//send 완료 처리라면
 			else if (GQCSRet != 0 && byteTransfered != 0)
 			{
-				//if (session->_SessionID != sessionID) continue;
-				if (_ProfilingFlag >= PROFILING_FLAG::MAIN_LOOP_FLAG)
-				{
-					Profiler profile("SendProc");
-					this->SendProc(session, byteTransfered);
-				}
-				else
-					this->SendProc(session, byteTransfered);
+				this->SendProc(session, byteTransfered);
 			}
 			//ReturnSession(sessionID);
 			int ioCounts = InterlockedDecrement(&session->_IOCounts);
@@ -922,84 +876,84 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// Monitering Thread
-	unsigned int CLanServer::CLanServerMoniteringThread(void* param)
-	{
-		printf("NetCore::NetCoreMoniteringThread Running...\n");
-		_BeginTime = GetTickCount64();
-		DWORD prev = timeGetTime();
-		while (true)
-		{
-			DWORD cur = timeGetTime();
-			ULONGLONG now = GetTickCount64();
-			if (_kbhit())
-			{
-				int key = _getch();
-				key = tolower(key);
-				if (key == 's' || key == 'q')
-				{
-					univ_dev::SaveProfiling();
-					univ_dev::ResetProfiling();
-				}
-				if (key == 'q')
-				{
-					this->_ShutDownFlag = true;
-					closesocket(this->_ListenSocket);
-					printf("Monitering Thread End\n");
-					return 0;
-				}
-				if (key == 'p')
-				{
-					switch (this->_ProfilingFlag)
-					{
-					case PROFILING_FLAG::OFF_FLAG:
-						this->_ProfilingFlag = PROFILING_FLAG::MAIN_LOOP_FLAG;
-						break;
-					case PROFILING_FLAG::MAIN_LOOP_FLAG:
-						this->_ProfilingFlag = PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG;
-						break;
-					case PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG:
-						this->_ProfilingFlag = PROFILING_FLAG::OFF_FLAG;
-						break;
-					}
-				}
-			}
-			if (cur - prev < 1000)
-			{
-				Sleep(50);
-				continue;
-			}
-			prev = cur;
-			//system("cls");
-			const char* str = nullptr;
-			switch (this->_ProfilingFlag)
-			{
-			case PROFILING_FLAG::OFF_FLAG:
-				str = "PROFILING_OFF_FLAG";
-				break;
-			case PROFILING_FLAG::MAIN_LOOP_FLAG:
-				str = "MAIN_LOOP_PROFILING_FLAG";
-				break;
-			case PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG:
-				str = "MAIN_LOOP + PACKET_PROCESS_LOOP_FLAG";
-				break;
-			default:
-				str = "DEFAULT";
-				break;
-			}
-			unsigned long long r_TPS = InterlockedExchange(&this->_PacketPerSec, 0);
-			unsigned long long r_AcceptPS = InterlockedExchange(&this->_AcceptPerSec, 0);
-			printf("\n-------------------------------------------------------------------------\nServerControl\nSaveProfile = \'s\'\nQuitProgram = \'q\'\nChangeProfilingFlag = \'p\'\n-------------------------------------------------------------------------\nNumOfThread = %d\nRunningThread = %d\nCurrentProfilingFlag = %s\nExcuteTime : %llu\nTPS : %llu\nTotalProcessedBytes : %llu\nTotal Packet Process : %llu\ng_SendSuccessCount : %llu\ng_SendIOPendingCount : %llu\ng_RecvSuccessCount : %llu\ng_RecvIOPendingCount : %llu\nMEMORY_FREE_LIST\nPacketPool Capacity : %d\nPacketPool UseCount : %d\nTotal Packet Use Count : %d\nSessionPool Capacity : %llu\nSessionPool UseCount : %d\nTotalRemovedSessionCounts :%llu\nTotalAcceptSessionCounts :%llu\nAcceptPerSec : %llu\n-------------------------------------------------------------------------\n", this->_ThreadPoolSize, this->_RunningThreadCount, str, (now - _BeginTime) / 1000, r_TPS, this->_TotalProcessedBytes, this->_TotalPacket, this->_SendSuccessCount, this->_SendIOPendingCount, this->_RecvSuccessCount, this->_RecvIOPendingCount, Packet::GetCapacityCount(), Packet::GetUseCount(), Packet::GetTotalPacketCount(), this->_MaxSessionCounts, (int)(this->_MaxSessionCounts - this->_SessionIdx.GetUseCount()), this->_TotalReleasedSession, this->_TotalAcceptSession, r_AcceptPS/*, this->_SessionMap.size()*/);
-			int cnt = 0;
-			for (auto iter = this->_ThreadIdMap.begin(); iter != this->_ThreadIdMap.end(); ++iter)
-			{
-				printf("Thread : %d , Count : %d\t\t\t", iter->first, iter->second);
-				if (++cnt % 2 == 0)
-					printf("\n");
-			}
-			printf("\n");
-		}
-		return -1;
-	}
+	//unsigned int CLanServer::CLanServerMoniteringThread(void* param)
+	//{
+	//	printf("NetCore::NetCoreMoniteringThread Running...\n");
+	//	_BeginTime = GetTickCount64();
+	//	DWORD prev = timeGetTime();
+	//	while (true)
+	//	{
+	//		DWORD cur = timeGetTime();
+	//		ULONGLONG now = GetTickCount64();
+	//		if (_kbhit())
+	//		{
+	//			int key = _getch();
+	//			key = tolower(key);
+	//			if (key == 's' || key == 'q')
+	//			{
+	//				univ_dev::SaveProfiling();
+	//				univ_dev::ResetProfiling();
+	//			}
+	//			if (key == 'q')
+	//			{
+	//				this->_ShutDownFlag = true;
+	//				closesocket(this->_ListenSocket);
+	//				printf("Monitering Thread End\n");
+	//				return 0;
+	//			}
+	//			if (key == 'p')
+	//			{
+	//				switch (this->_ProfilingFlag)
+	//				{
+	//				case PROFILING_FLAG::OFF_FLAG:
+	//					this->_ProfilingFlag = PROFILING_FLAG::MAIN_LOOP_FLAG;
+	//					break;
+	//				case PROFILING_FLAG::MAIN_LOOP_FLAG:
+	//					this->_ProfilingFlag = PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG;
+	//					break;
+	//				case PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG:
+	//					this->_ProfilingFlag = PROFILING_FLAG::OFF_FLAG;
+	//					break;
+	//				}
+	//			}
+	//		}
+	//		if (cur - prev < 1000)
+	//		{
+	//			Sleep(50);
+	//			continue;
+	//		}
+	//		prev = cur;
+	//		//system("cls");
+	//		const char* str = nullptr;
+	//		switch (this->_ProfilingFlag)
+	//		{
+	//		case PROFILING_FLAG::OFF_FLAG:
+	//			str = "PROFILING_OFF_FLAG";
+	//			break;
+	//		case PROFILING_FLAG::MAIN_LOOP_FLAG:
+	//			str = "MAIN_LOOP_PROFILING_FLAG";
+	//			break;
+	//		case PROFILING_FLAG::PACKET_PROCESS_LOOP_FLAG:
+	//			str = "MAIN_LOOP + PACKET_PROCESS_LOOP_FLAG";
+	//			break;
+	//		default:
+	//			str = "DEFAULT";
+	//			break;
+	//		}
+	//		unsigned long long r_TPS = InterlockedExchange(&this->_PacketPerSec, 0);
+	//		unsigned long long r_AcceptPS = InterlockedExchange(&this->_AcceptPerSec, 0);
+	//		printf("\n-------------------------------------------------------------------------\nServerControl\nSaveProfile = \'s\'\nQuitProgram = \'q\'\nChangeProfilingFlag = \'p\'\n-------------------------------------------------------------------------\nNumOfThread = %d\nRunningThread = %d\nCurrentProfilingFlag = %s\nExcuteTime : %llu\nTPS : %llu\nTotalProcessedBytes : %llu\nTotal Packet Process : %llu\ng_SendSuccessCount : %llu\ng_SendIOPendingCount : %llu\ng_RecvSuccessCount : %llu\ng_RecvIOPendingCount : %llu\nMEMORY_FREE_LIST\nPacketPool Capacity : %d\nPacketPool UseCount : %d\nTotal Packet Use Count : %d\nSessionPool Capacity : %llu\nSessionPool UseCount : %d\nTotalRemovedSessionCounts :%llu\nTotalAcceptSessionCounts :%llu\nAcceptPerSec : %llu\n-------------------------------------------------------------------------\n", this->_ThreadPoolSize, this->_RunningThreadCount, str, (now - _BeginTime) / 1000, r_TPS, this->_TotalProcessedBytes, this->_TotalPacket, this->_SendSuccessCount, this->_SendIOPendingCount, this->_RecvSuccessCount, this->_RecvIOPendingCount, Packet::GetCapacityCount(), Packet::GetUseCount(), Packet::GetTotalPacketCount(), this->_MaxSessionCounts, (int)(this->_MaxSessionCounts - this->_SessionIdx.GetUseCount()), this->_TotalReleasedSession, this->_TotalAcceptSession, r_AcceptPS/*, this->_SessionMap.size()*/);
+	//		int cnt = 0;
+	//		for (auto iter = this->_ThreadIdMap.begin(); iter != this->_ThreadIdMap.end(); ++iter)
+	//		{
+	//			printf("Thread : %d , Count : %d\t\t\t", iter->first, iter->second);
+	//			if (++cnt % 2 == 0)
+	//				printf("\n");
+	//		}
+	//		printf("\n");
+	//	}
+	//	return -1;
+	//}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -1191,6 +1145,24 @@ namespace univ_dev
 	{
 		return _SessionIdx.push(idx);
 	}
+	CLanServer::MoniteringInfo CLanServer::GetMoniteringInfo()
+	{
+		MoniteringInfo ret;
+		ret._WorkerThreadCount = _ThreadPoolSize;
+		ret._RunningThreadCount = _RunningThreadCount;
+		ret._AccpeptCount = InterlockedExchange(&_AcceptPerSec, 0);
+		ret._RecvPacketCount = InterlockedExchange(&_RecvPacketPerSec, 0);
+		ret._SendPacketCount = InterlockedExchange(&_SendPacketPerSec, 0);
+		//ret._RecvIOPendingCount = _RecvIOPendingCount;
+		//ret._RecvSuccessCount = _RecvSuccessCount;
+		//ret._SendIOPendingCount = _SendIOPendingCount;
+		//ret._SendSuccessCount = _SendSuccessCount;
+		ret._TotalAcceptSession = _TotalAcceptSession;
+		ret._TotalPacket = _TotalPacket;
+		ret._TotalProecessedBytes = _TotalProcessedBytes;
+		ret._TotalReleaseSession = _TotalReleasedSession;
+		return ret;
+	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -1326,7 +1298,7 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// 생성자 소멸자
 	CLanServer::CLanServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts)
-		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _PacketPerSec{ 0 }, _RecvIOPendingCount{ 0 }, _RecvSuccessCount{ 0 }, _SendIOPendingCount{ 0 }, _SendSuccessCount{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _LogThread{ nullptr }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _ProfilingFlag{ PROFILING_FLAG::OFF_FLAG }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 }, _NagleOff{ nagleOff }, _MaxSessionCounts{ maxSessionCounts }, _AcceptPerSec{ 0 }, _SessionArr{ nullptr }
+		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _RecvPacketPerSec{ 0 }, _SendPacketPerSec{ 0 }, _RecvIOPendingCount{ 0 }, _RecvSuccessCount{ 0 }, _SendIOPendingCount{ 0 }, _SendSuccessCount{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _LogThread{ nullptr }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _ProfilingFlag{ PROFILING_FLAG::OFF_FLAG }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 }, _NagleOff{ nagleOff }, _MaxSessionCounts{ maxSessionCounts }, _AcceptPerSec{ 0 }, _SessionArr{ nullptr }
 	{
 		this->CLanServerStartup();
 	}
