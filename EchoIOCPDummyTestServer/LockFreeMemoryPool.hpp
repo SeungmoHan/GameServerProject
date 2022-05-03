@@ -56,16 +56,14 @@ namespace univ_dev
 					ObjectType* newObject = NewAlloc();
 					return newObject;
 				}
-				
-				
-				popCount = this->_CheckCount;
 
+				popCount = this->_CheckCount;
 
 				comp[0] = (LONG64)currentTop;
 				comp[1] = popCount;
 				nextNode = currentTop->_NextNode;
 
-				if (InterlockedCompareExchange128((LONG64*)&_FreeNode, comp[1]+1, (LONG64)nextNode, comp) == 1)
+				if (InterlockedCompareExchange128((LONG64*)&_FreeNode, comp[1] + 1, (LONG64)nextNode, comp) == 1)
 					break;
 			}
 
@@ -73,7 +71,6 @@ namespace univ_dev
 			if (currentTop->_UnderFlowGuard != this) CRASH();
 			if (currentTop->_UseFlag != 0) CRASH();
 			currentTop->_UseFlag++;
-			//InterlockedIncrement(&currentTop->_UseFlag);
 			ObjectType* pObj = &currentTop->_Object;
 
 			if (this->_PlacementNew)
@@ -130,7 +127,11 @@ namespace univ_dev
 		ObjectType* NewAlloc()
 		{
 			DataNode* newNode = (DataNode*)malloc(sizeof(DataNode));
-			if (newNode == nullptr) CRASH();
+			if (newNode == nullptr)
+			{
+				CRASH();
+				return nullptr;
+			}
 
 			newNode->_UnderFlowGuard = this;
 			newNode->_OverFlowGuard = this;
@@ -149,12 +150,11 @@ namespace univ_dev
 		}
 
 
+		int						_Capacity = 0;
+		bool					_PlacementNew = false;
+		alignas(64) int			_UseCount = 0;
 		alignas(64)DataNode* _FreeNode;
-		__int64 _CheckCount;
-		alignas(64) int _UseCount = 0;
-		int _Capacity = 0;
-		bool _PlacementNew = false;
-
+		__int64					_CheckCount;
 	};
 }
 

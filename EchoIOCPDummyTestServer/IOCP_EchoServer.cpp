@@ -7,7 +7,7 @@ namespace univ_dev
 {
 
 	EchoServer::EchoServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts) 
-		: CLanServer(port, backlogQueueSize, threadPoolSize, runningThread, nagleOff, maxSessionCounts) ,_MoniteringThread(nullptr) {
+		: CLanServer(port, backlogQueueSize, threadPoolSize, runningThread, nagleOff, maxSessionCounts) ,_MoniteringThread(nullptr),_RunningFlag(false) {
 		Start();
 	};
 	
@@ -23,53 +23,101 @@ namespace univ_dev
 
 	unsigned int EchoServer::EchoServerMoniteringThread(void* param)
 	{
-		DWORD begin = timeGetTime();
-		DWORD prev = timeGetTime();
-		DWORD cur = prev;
-		while (true)
-		{
-			if (_kbhit())
-			{
-				int key = _getch();
-				if (toupper(key) == 'Q')
-				{
-					this->CLanServer::PostLanServerStop();
-					return 0;
-				}
-			}
-			cur = timeGetTime();
-			if (cur - prev < 1000)
-			{
-				Sleep(100);
-				continue;
-			}
-			prev = cur;
-			MoniteringInfo info = this->GetMoniteringInfo();
+        DWORD begin = timeGetTime();
+        DWORD prev;
+        DWORD cur;
+        DWORD simpleLogTimer;
+        DWORD longLogTimer;
+        longLogTimer = simpleLogTimer = cur = prev = begin;
+        while (this->_RunningFlag)
+        {
+            if (_kbhit())
+            {
+                int key = _getch();
+                if (toupper(key) == 'Q')
+                {
+                    this->_RunningFlag = false;
+                    this->CLanServer::PostLanServerStop();
+                    return 0;
+                }
+                else if (toupper(key) == 'S')
+                {
+                    SaveProfiling();
+                    ResetProfiling();
+                }
+            }
 
-			printf("\n----------------------------------------------------\n");
-			printf("Excute Timer : %u\n", (timeGetTime() - begin) / 1000);
-			printf("-------------------------------\n");
-			printf("Worker Thread Count : %u\n", info._WorkerThreadCount);
-			printf("Running Thread Count : %u\n", info._RunningThreadCount);
-			printf("-------------------------------\n");
-			printf("Total Accept Count : %llu\n", info._TotalAcceptSession);
-			printf("Total Release Count : %llu\n", info._TotalReleaseSession);
-			printf("Total Processed Packet : %llu\n", info._TotalPacket);
-			printf("Total Processed Bytes : %llu\n", info._TotalProecessedBytes);
-			printf("-------------------------------\n");
-			printf("Accept Per Sec : %llu\n", info._AccpeptCount);
-			printf("Recv TPS : %llu\n", info._RecvPacketCount);
-			printf("Send TPS : %llu\n", info._SendPacketCount);
-			printf("Total TPS : %llu\n", info._SendPacketCount + info._RecvPacketCount);
-			printf("-------------------------------\n");
-			printf("Packet Chunk Capacity : %d\n", Packet::GetCapacityCount());
-			printf("Packet Chunk UseCount : %d\n", Packet::GetUseCount());
-			printf("Packet UseCount : %d\n", Packet::GetTotalPacketCount());
-			printf("-------------------------------\n");
-			printf("----------------------------------------------------\n");
+            cur = timeGetTime();
+            if (cur - prev < 1000)
+            {
+                Sleep(100);
+                continue;
+            }
 
-		}
-		return -1;
+            MoniteringInfo info = this->CLanServer::GetMoniteringInfo();
+            this->_HardWareMoniter.UpdateHardWareTime();
+            this->_ProcessMoniter.UpdateProcessTime();
+
+
+            int tempSize;
+            int tempArr[20]{ 0 };
+            unsigned long long sectorSize = 0;
+            unsigned long long sectorCapacity = 0;
+            DWORD afterServerOn = (timeGetTime() - begin) / 1000;
+
+            DWORD day = afterServerOn / 86400;
+            DWORD hour = (afterServerOn % 86400) / 3600;
+            DWORD minute = (afterServerOn % 3600) / 60;
+            DWORD sec = afterServerOn % 60;
+            if (cur - simpleLogTimer > 60000)
+            {
+                simpleLogTimer = cur;
+                FILE* file = nullptr;
+                while (file == nullptr)
+                    fopen_s(&file, "__HardWareMemoryLog.txt", "ab");
+                if (cur - longLogTimer > 300000)
+                {
+                    longLogTimer = cur;
+                    fprintf(file, "\n-------------------------------------MONITERING----------------------------------------\n");
+                    fprintf(file, "| After Server On : %u day / %u h / %u m / %u s\n", day, hour, minute, sec);
+                    fprintf(file, "|----------------------------------------POOL------------------------------------------\n");
+                    fprintf(file, "| LockFreeQueue Size / Capacity / Max : %llu / %llu / %llu\n", info._LockFreeQueueSize, info._LockFreeQueueCapacity, info._LockFreeMaxCapacity);
+                    fprintf(file, "| Packet Chunk Capacity / UseCount : %d / %d\n", Packet::GetCapacityCount(), Packet::GetUseCount());
+                    fprintf(file, "| Packet ToTal UseCount : %d\n", Packet::GetTotalPacketCount());
+                    fprintf(file, "| Session Count / IDX Capacity / IDX Size : %llu / %llu / %llu\n", info._SessionCnt, info._LockFreeStackCapacity, info._LockFreeStackSize);
+                    fprintf(file, "|----------------------------------------USAGE_MONITER---------------------------------\n");
+                    fprintf(file, "| Available / NPPool / Private Mem : %lluMb / %lluMb / %lluKb\n", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
+                    fprintf(file, "---------------------------------------------------------------------------------------\n");
+                }
+                else
+                    fprintf(file, "Available / NPPool / Private Mem : %lluMb / %lluMb / %lluKb\n", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
+
+                fclose(file);
+            }
+
+            prev = cur;
+
+            printf("\n-------------------------------------MONITERING----------------------------------------\n");
+            printf("| After Server On : %u day / %u h / %u m / %u s\n", day, hour, minute, sec);
+            printf("|----------------------------------------THREAD----------------------------------------\n");
+            printf("| Worker Thread / Running  thread : %u / %u\n", info._WorkerThreadCount, info._RunningThreadCount);
+            printf("|----------------------------------------TOTAL-----------------------------------------\n");
+            printf("| Total Accept / Release  : %llu /  %llu \n", info._TotalAcceptSession, info._TotalReleaseSession);
+            printf("| Total Processed Bytes : %llu\n", info._TotalProecessedBytes);
+            printf("|----------------------------------------TPS-------------------------------------------\n");
+            printf("| Accept Per Sec : %llu\n", info._AccpeptCount);
+            printf("| TPS// Recv / Send / Total  : %llu / %llu / %llu\n", info._RecvPacketCount, info._SendPacketCount, info._SendPacketCount + info._RecvPacketCount);
+            printf("| LockFreeQueue Size / Capacity / Max : %llu / %llu / %llu\n", info._LockFreeQueueSize, info._LockFreeQueueCapacity, info._LockFreeMaxCapacity);
+            printf("|----------------------------------------POOL------------------------------------------\n");
+            printf("| Packet Chunk Capacity / UseCount : %d / %d\n", Packet::GetCapacityCount(), Packet::GetUseCount());
+            printf("| Packet ToTal UseCount : %d\n", Packet::GetTotalPacketCount());
+            printf("|----------------------------------------USAGE_MONITER---------------------------------\n");
+            printf("| NIC Send / Recv (10KB) : %.1llf / %.1llf\n", this->_HardWareMoniter.EthernetSendKBytes(), this->_HardWareMoniter.EthernetRecvKBytes());
+            printf("| Available / NPPool / Private Mem : %lluMb / %lluMb / %lluKb\n", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
+            printf("| PROCESS / CPU : [T %.1llf%% K %.1llf%% U %.1llf%%] / [T %.1llf%% K %.1llf%% U %.1llf%%]   \n", this->_ProcessMoniter.ProcessTotal(), this->_ProcessMoniter.ProcessKernel(), this->_ProcessMoniter.ProcessUser(), this->_HardWareMoniter.ProcessorTotal(), this->_HardWareMoniter.ProcessorKernel(), this->_HardWareMoniter.ProcessorUser());
+            printf("---------------------------------------------------------------------------------------\n");
+        }
+        return -1;
 	}
 
 	void EchoServer::Start()
@@ -79,12 +127,18 @@ namespace univ_dev
 			DWORD coreErr = this->GetNetCoreErrorCode();
 			DWORD lastErr = this->GetLastAPIErrorCode();
 			printf("API Error : %d\nCore Error : %d\n", lastErr, coreErr);
+			this->_RunningFlag = false;
 			return;
 		}
+
 		this->_MoniteringThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
-		if (_MoniteringThread == nullptr)
+		if (this->_MoniteringThread == nullptr)
+		{
+			this->_RunningFlag = false;
 			return;
-		Run();
+		}
+		this->_RunningFlag = true;
+		this->CLanServer::Run();
 	}
 
 	void EchoServer::Close()
@@ -134,7 +188,7 @@ namespace univ_dev
 	bool EchoServer::OnConnectionRequest(WCHAR* ipStr, DWORD ip, USHORT port)
 	{
 		//white IP 
-		return true;
+		return _RunningFlag;
 	}
 
 	void EchoServer::OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID)
@@ -150,5 +204,9 @@ namespace univ_dev
 	void EchoServer::OnClientLeave(ULONGLONG sessionID)
 	{
 		//printf("SessionLeave :%llu\n",sessionID);
+	}
+	void EchoServer::OnTimeOut(ULONGLONG sessionID)
+	{
+		DisconnectSession(sessionID);
 	}
 }

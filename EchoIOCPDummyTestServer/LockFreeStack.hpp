@@ -20,32 +20,28 @@ namespace univ_dev
 			Node* _Next = nullptr;
 		};
 	public:
-		LockFreeStack() : _Top(nullptr), _Size(0),_Pool(new LockFreeMemoryPool<Node>()),_CheckCount(0){ }
+		LockFreeStack() : _Top(nullptr), _Size(0)/*, _Pool(new LockFreeMemoryPool<Node>())*/, _CheckCount(0) { }
 		~LockFreeStack()
 		{
 			while (_Top != nullptr)
 			{
 				Node* next = _Top->_Next;
-				_Pool->Free(_Top);
+				_Pool.Free(_Top);
 				_Top = next;
 			}
-			delete _Pool;
+			//delete _Pool;
 		}
 		int size() { return _Size; }
-		int GetCapacityCount(){ return _Pool->GetCapacityCount(); }
-		int GetUseCount() { return _Pool->GetUseCount(); }
-		unsigned long long GetTotalPushPopCount()
-		{
-			return tps;
-		}
+		int GetCapacityCount() { return _Pool.GetCapacityCount(); }
+		int GetUseCount() { return _Pool.GetUseCount(); }
 		void SetTotalPushPopCountZero()
 		{
 			InterlockedExchange(&this->tps, 0);
 		}
 		void push(T data)
 		{
-			Node* newNode = _Pool->Alloc();
-			
+			Node* newNode = _Pool.Alloc();
+
 			newNode->_Data = data;
 			Node* currentTop = nullptr;
 			LONG64 popCount = 0;
@@ -62,9 +58,7 @@ namespace univ_dev
 				if (InterlockedCompareExchange128((LONG64*)&this->_Top, comp[1] + 1, (LONG64)newNode, comp) == 1)
 					break;
 			}
-
 			InterlockedIncrement((unsigned int*)&_Size);
-			InterlockedIncrement(&tps);
 		}
 		bool pop(T& ret)
 		{
@@ -81,7 +75,7 @@ namespace univ_dev
 					CRASH();
 					return false;
 				}
-				
+
 				popCount = this->_CheckCount;
 				nextNode = currentTop->_Next;
 				comp[0] = (LONG64)currentTop;
@@ -93,9 +87,8 @@ namespace univ_dev
 
 			ret = currentTop->_Data;
 
-			_Pool->Free(currentTop);
+			_Pool.Free(currentTop);
 			InterlockedDecrement((unsigned int*)&_Size);
-			InterlockedIncrement(&tps);
 			return true;
 		}
 		bool isempty(Node* top)
@@ -103,12 +96,10 @@ namespace univ_dev
 			return nullptr == top;
 		}
 	private:
+		LockFreeMemoryPool<Node>	_Pool;
 		alignas(64) Node* _Top;
-		__int64 _CheckCount;
-		alignas(64) int _Size;
-		LockFreeMemoryPool<Node>* _Pool;
-
-		alignas(64) unsigned long long tps = 0;
+		__int64						_CheckCount;
+		alignas(64) int				_Size;
 	};
 }
 

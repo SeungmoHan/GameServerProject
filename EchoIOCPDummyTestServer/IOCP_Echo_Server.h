@@ -3,7 +3,8 @@
 #define __IOCP_ECHO_SERVER__
 #define __UNIV_DEVELOPER_
 #include "CLanServer.h"
-
+#include "HardWareMoniteringClass.h"
+#include "ProcessMoniteringClass.h"
 
 namespace univ_dev
 {
@@ -22,6 +23,10 @@ namespace univ_dev
 
 		unsigned int EchoServerMoniteringThread(void* param);
 
+		HardWareMoniter							_HardWareMoniter;
+		ProcessMoniter							_ProcessMoniter;
+		DWORD									_RunningFlag;
+
 		HANDLE _MoniteringThread;
 
 		void OnRecv(ULONGLONG sessionID, Packet* recvPacket) override;
@@ -29,6 +34,7 @@ namespace univ_dev
 		bool OnConnectionRequest(WCHAR* ipStr, DWORD ip, USHORT port) override;
 		void OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID) override;
 		void OnClientLeave(ULONGLONG sessionID) override; // Release»ƒ »£√‚
+		void OnTimeOut(ULONGLONG sessionID) override;
 	};
 }
 
