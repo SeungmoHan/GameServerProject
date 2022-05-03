@@ -2,7 +2,6 @@
 #include "SerializingBuffer.h"
 #include <string>
 
-#define NET_HEADER_SIZE (short)sizeof(NetServerPacket)
 
 namespace univ_dev
 {
@@ -10,10 +9,10 @@ namespace univ_dev
 
 	static LockFreeMemoryPoolTLS<Packet> _PakcetPool;
 
-	Packet::Packet() : _Begin(new char[PacketSize::DefaultSize]), _End(_Begin + PacketSize::DefaultSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(PacketSize::DefaultSize), _RefCount(0) {}
+	Packet::Packet() : _EncodeFlag(0), _Begin(new unsigned char[PacketSize::DefaultSize]), _End(_Begin + PacketSize::DefaultSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(PacketSize::DefaultSize), _RefCount(0) {}
 
 
-	Packet::Packet(int bufferSize) : _Begin(new char[bufferSize]), _End(_Begin + bufferSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(bufferSize), _RefCount(0) {}
+	Packet::Packet(int bufferSize) : _EncodeFlag(false), _Begin(new unsigned char[bufferSize]), _End(_Begin + bufferSize), _WritePointer(_Begin), _ReadPointer(_Begin), _BufferSize(bufferSize), _RefCount(0) {}
 
 	Packet::~Packet()
 	{
@@ -22,39 +21,40 @@ namespace univ_dev
 
 	void Packet::Release()
 	{
-		delete[] _Begin;
+		delete[] this->_Begin;
 	}
 
 	void Packet::Clear()
 	{
-		_WritePointer = _Begin + 5;
-		_ReadPointer = _Begin;
+		InterlockedExchange(&this->_EncodeFlag, false);
+		this->_WritePointer = this->_Begin + 5;
+		this->_ReadPointer = this->_Begin;
 	}
 
 
 	int Packet::GetBufferSize()
 	{
-		return _WritePointer - _ReadPointer;
+		return this->_WritePointer - this->_ReadPointer;
 	}
 
-	char* Packet::GetWritePtr()
+	unsigned char* Packet::GetWritePtr()
 	{
-		return _WritePointer;
+		return this->_WritePointer;
 	}
 
-	char* Packet::GetBeginPtr()
+	unsigned char* Packet::GetBeginPtr()
 	{
-		return _Begin;
+		return this->_Begin;
 	}
 
 	void Packet::AddRef()
 	{
-		int r = _InterlockedIncrement((long*)&_RefCount);
+		int r = _InterlockedIncrement((long*)&this->_RefCount);
 	}
 
 	bool Packet::SubRef()
 	{
-		int r = _InterlockedDecrement((long*)&_RefCount);
+		int r = _InterlockedDecrement((long*)&this->_RefCount);
 		if (r == 0)
 			return true;
 		return false;
@@ -62,35 +62,38 @@ namespace univ_dev
 
 	void Packet::SetLanHeader()
 	{
-		short* header = (short*)(_Begin + 3);
-		_ReadPointer = (char*)header;
+		short* header = (short*)(this->_Begin + 3);
+		this->_ReadPointer = (unsigned char*)header;
 		*header = GetBufferSize() - LAN_HEADER_SIZE;
 	}
 
 	void Packet::SetNetHeader()
 	{
-		NetServerPacket packet{ 0 };
-		packet._ByteCode = this->PACKET_CODE;
-		packet._Len = GetBufferSize() - NET_HEADER_SIZE;
+		if (_EncodeFlag == true)
+			return;
+		_EncodeFlag = true;
 
-		char* temp = _Begin + 5;
+		NetServerHeader header{ 0 };
+		header._ByteCode = this->PACKET_CODE;
+		header._Len = GetBufferSize() - NET_HEADER_SIZE;
+
+		unsigned char* temp = this->_Begin + 5;
 		int checkSum = 0;
 
-		while (temp < _WritePointer)
+		while (temp < this->_WritePointer)
 		{
 			checkSum += *temp;
 			temp++;
 		}
 		checkSum %= 256;
-		packet._CheckSum = checkSum;
-		packet._RandomKey = rand();
-		memcpy_s(_Begin, NET_HEADER_SIZE, &packet, NET_HEADER_SIZE);
+		header._CheckSum = checkSum;
+		header._RandomKey = rand();
+		memcpy_s(this->_Begin, NET_HEADER_SIZE, &header, NET_HEADER_SIZE);
 		Encode();
 	}
 
 	void Packet::Encode()
 	{
-
 		unsigned char* temp = (unsigned char*)this->_Begin;
 		int bufferSize = GetBufferSize();
 
@@ -129,11 +132,11 @@ namespace univ_dev
 
 	bool Packet::VerifyCheckSum()
 	{
-		char checksum = this->_Begin[4];
-		char* temp = this->_Begin + 5;
+		unsigned char checksum = this->_Begin[4];
+		unsigned char* temp = (unsigned char*)this->_Begin + 5;
 
-		int compChecksum = 0;
-		while (temp < _WritePointer)
+		unsigned int compChecksum = 0;
+		while (temp < (unsigned char*)this->_WritePointer)
 		{
 			compChecksum += *temp;
 			temp++;
@@ -145,32 +148,32 @@ namespace univ_dev
 		return true;
 	}
 
-	char* Packet::GetReadPtr()
+	unsigned char* Packet::GetReadPtr()
 	{
-		return _ReadPointer;
+		return this->_ReadPointer;
 	}
 
-	int Packet::MoveWritePtr(int size)
-	{
-		if (_WritePointer + size >= _End)
-		{
-			_WritePointer = _End - 1;
-			return _End - _WritePointer;
-		}
-		_WritePointer += size;
-		return size;
-	}
+	//int Packet::MoveWritePtr(int size)
+	//{
+	//	if (this->_WritePointer + size >= this->_End)
+	//	{
+	//		this->_WritePointer = this->_End - 1;
+	//		return this->_End - this->_WritePointer;
+	//	}
+	//	this->_WritePointer += size;
+	//	return size;
+	//}
 
-	int Packet::MoveReadPtr(int size)
-	{
-		if (_ReadPointer + size >= _End)
-		{
-			_ReadPointer = _End - 1;
-			return _End - _ReadPointer;
-		}
-		_ReadPointer += size;
-		return size;
-	}
+	//int Packet::MoveReadPtr(int size)
+	//{
+	//	if (this->_ReadPointer + size >= this->_End)
+	//	{
+	//		this->_ReadPointer = this->_End - 1;
+	//		return this->_End - this->_ReadPointer;
+	//	}
+	//	this->_ReadPointer += size;
+	//	return size;
+	//}
 
 	int Packet::GetUseCount()
 	{
@@ -191,7 +194,6 @@ namespace univ_dev
 	{
 		Packet* packet = _PakcetPool.Alloc();
 		packet->Clear();
-		packet->AddRef();
 		return packet;
 	}
 
@@ -199,326 +201,355 @@ namespace univ_dev
 	{
 		if (packet->SubRef())
 		{
+			packet->Clear();
 			_PakcetPool.Free(packet);
 		}
 	}
 
-	void Packet::PutString(const char* str, int size)
+	void Packet::PutString(const char* str, size_t stringLen)
 	{
-		memcpy_s(_WritePointer, size, str, size);
-		_WritePointer += size;
+		strcpy_s((char*)this->_WritePointer, stringLen, str);
+		this->_WritePointer += stringLen;
+	}
+
+	void Packet::PutWString(const WCHAR* str, size_t stringLen)
+	{
+		wcscpy_s((WCHAR*)this->_WritePointer, stringLen * 2, str);
+		this->_WritePointer += stringLen * 2;
+	}
+
+	void Packet::GetString(char* dest, size_t stringLen)
+	{
+		strcpy_s(dest, stringLen, (char*)this->_ReadPointer);
+		this->_ReadPointer += stringLen;
+	}
+
+	void Packet::GetWString(WCHAR* dest, size_t stringLen)
+	{
+		wcscpy_s(dest, stringLen * 2, (WCHAR*)this->_ReadPointer);
+		this->_ReadPointer += stringLen * 2;
+	}
+
+	void Packet::PutBuffer(const char* buffer, size_t size)
+	{
+		memmove_s(this->_WritePointer, size, buffer, size);
+		this->_WritePointer += size;
+	}
+
+	void Packet::GetBuffer(char* buffer, size_t size)
+	{
+		memmove_s(buffer, size, this->_ReadPointer, size);
+		this->_ReadPointer += size;
 	}
 
 	Packet& Packet::operator=(const Packet& other)
 	{
 		this->_BufferSize = other._BufferSize;
-		_Begin = new char[_BufferSize];
-		_End = _Begin + _BufferSize;
-		memcpy_s(_Begin, other._WritePointer - other._ReadPointer, other._ReadPointer, other._WritePointer - other._ReadPointer);
+		this->_Begin = new unsigned char[this->_BufferSize];
+		this->_End = this->_Begin + this->_BufferSize;
+		memcpy_s(this->_Begin, other._WritePointer - other._ReadPointer, other._ReadPointer, other._WritePointer - other._ReadPointer);
 		return *this;
 	}
 
-	Packet& Packet::operator>>(unsigned char& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		value = *_ReadPointer;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(unsigned char& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	value = *this->_ReadPointer;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(char& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		value = *_ReadPointer;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(char& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	value = *this->_ReadPointer;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(unsigned short& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		unsigned short* tempPtr = (unsigned short*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(unsigned short& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	unsigned short* tempPtr = (unsigned short*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(short& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		short* tempPtr = (short*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(short& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	short* tempPtr = (short*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(int& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		int* tempPtr = (int*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
-	Packet& Packet::operator>>(unsigned int& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		unsigned int* tempPtr = (unsigned int*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
-	Packet& Packet::operator>>(unsigned long& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		unsigned long* tempPtr = (unsigned long*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
-	Packet& Packet::operator>>(long& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		long* tempPtr = (long*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(int& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	int* tempPtr = (int*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
+	//Packet& Packet::operator>>(unsigned int& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	unsigned int* tempPtr = (unsigned int*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
+	//Packet& Packet::operator>>(unsigned long& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	unsigned long* tempPtr = (unsigned long*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
+	//Packet& Packet::operator>>(long& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	long* tempPtr = (long*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(float& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		float* tempPtr = (float*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(float& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	float* tempPtr = (float*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(double& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		double* tempPtr = (double*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(double& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	double* tempPtr = (double*)_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(__int64& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		__int64* tempPtr = (__int64*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(__int64& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	__int64* tempPtr = (__int64*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator>>(unsigned __int64& value)
-	{
-		if (_ReadPointer + sizeof(value) - 1 >= _End)
-		{
-			//읽기 불가능
-			return *this;
-		}
-		unsigned __int64* tempPtr = (unsigned __int64*)_ReadPointer;
-		value = *tempPtr;
-		MoveReadPtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator>>(unsigned __int64& value)
+	//{
+	//	if (this->_ReadPointer + sizeof(value) - 1 >= this->_End)
+	//	{
+	//		//읽기 불가능
+	//		return *this;
+	//	}
+	//	unsigned __int64* tempPtr = (unsigned __int64*)this->_ReadPointer;
+	//	value = *tempPtr;
+	//	this->MoveReadPtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(unsigned char value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		*_WritePointer = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(unsigned char value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	*this->_WritePointer = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(char value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		*_WritePointer = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(char value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	*this->_WritePointer = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(unsigned short value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		unsigned short* tempPtr = (unsigned short*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(unsigned short value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	unsigned short* tempPtr = (unsigned short*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(short value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		short* tempPtr = (short*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(short value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	short* tempPtr = (short*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(int value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		int* tempPtr = (int*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
-	Packet& Packet::operator<<(unsigned int value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		unsigned int* tempPtr = (unsigned int*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
-	Packet& Packet::operator<<(unsigned long value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		unsigned long* tempPtr = (unsigned long*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
-	Packet& Packet::operator<<(long value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		long* tempPtr = (long*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(int value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	int* tempPtr = (int*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
+	//Packet& Packet::operator<<(unsigned int value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	unsigned int* tempPtr = (unsigned int*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
+	//Packet& Packet::operator<<(unsigned long value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	unsigned long* tempPtr = (unsigned long*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
+	//Packet& Packet::operator<<(long value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	long* tempPtr = (long*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(float value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		float* tempPtr = (float*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(float value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	float* tempPtr = (float*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(__int64 value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		__int64* tempPtr = (__int64*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(__int64 value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	__int64* tempPtr = (__int64*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(unsigned __int64 value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		unsigned __int64* tempPtr = (unsigned __int64*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
+	//Packet& Packet::operator<<(unsigned __int64 value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	unsigned __int64* tempPtr = (unsigned __int64*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 
-	Packet& Packet::operator<<(double value)
-	{
-		if (_WritePointer + (sizeof(value) - 1) >= _End)
-		{
-			//저장이 불가능한경우.
-			return *this;
-		}
-		double* tempPtr = (double*)_WritePointer;
-		*tempPtr = value;
-		MoveWritePtr(sizeof(value));
-		return *this;
-	}
-
-
+	//Packet& Packet::operator<<(double value)
+	//{
+	//	if (this->_WritePointer + (sizeof(value) - 1) >= this->_End)
+	//	{
+	//		//저장이 불가능한경우.
+	//		return *this;
+	//	}
+	//	double* tempPtr = (double*)this->_WritePointer;
+	//	*tempPtr = value;
+	//	this->MoveWritePtr(sizeof(value));
+	//	return *this;
+	//}
 }

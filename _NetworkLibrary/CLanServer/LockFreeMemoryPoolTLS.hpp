@@ -46,11 +46,11 @@ namespace univ_dev
 		};
 
 	public:
-		LockFreeMemoryPoolTLS(bool placementNew = false) : _TLS_PoolIdx(TlsAlloc()), _PlacementNew(placementNew),_TotalUseCount(0), _Pool(new LockFreeMemoryPool<Chunk>(placementNew)) {};
+		LockFreeMemoryPoolTLS(bool placementNew = false) : _TLS_PoolIdx(TlsAlloc()), _PlacementNew(placementNew), _TotalUseCount(0)/*, _Pool(new LockFreeMemoryPool<Chunk>(placementNew))*/ {};
 		~LockFreeMemoryPoolTLS()
 		{
 			TlsFree(_TLS_PoolIdx);
-			delete _Pool;
+			//delete _Pool;
 		}
 
 		ObjectType* Alloc()
@@ -68,10 +68,7 @@ namespace univ_dev
 
 			if (_PlacementNew)
 				new (ret) ObjectType();
-
-			//InterlockedIncrement((unsigned long long*)&tps);
-			InterlockedIncrement((unsigned long long*)&_TotalUseCount);
-
+			InterlockedIncrement((unsigned long long*) & _TotalUseCount);
 			return ret;
 		}
 
@@ -85,19 +82,17 @@ namespace univ_dev
 
 			if (InterlockedIncrement(&chunk->_FreeCount) == MAX_CHUNK_SIZE)
 				ChunkFree(chunk);
-			//InterlockedIncrement((unsigned long long*)&tps);
-			InterlockedDecrement((unsigned long long*)&_TotalUseCount);
+			InterlockedDecrement((unsigned long long*) & _TotalUseCount);
 		}
 
-		int GetUseCount() { return _Pool->GetUseCount(); }
-		int GetCapacityCount() { return _Pool->GetCapacityCount(); }
-		//int GetTps() { return InterlockedExchange((unsigned long long*) & tps, 0); }
+		int GetUseCount() { return _Pool.GetUseCount(); }
+		int GetCapacityCount() { return _Pool.GetCapacityCount(); }
 		int GetTotalUseCount() { return _TotalUseCount; }
 
 	private:
 		Chunk* ChunkAlloc()
 		{
-			Chunk* newChunk = _Pool->Alloc();
+			Chunk* newChunk = _Pool.Alloc();
 			if (newChunk == nullptr)
 			{
 				CRASH();
@@ -110,17 +105,14 @@ namespace univ_dev
 		void ChunkFree(Chunk* chunk)
 		{
 			chunk->Clear();
-			_Pool->Free(chunk);
+			_Pool.Free(chunk);
 		}
 
 	private:
-		LockFreeMemoryPool<Chunk>* _Pool;
-		DWORD _TLS_PoolIdx;
-		bool _PlacementNew;
-
-	public:
-		//__int64 tps;
-		alignas(64) __int64 _TotalUseCount;
+		DWORD						_TLS_PoolIdx;
+		bool						_PlacementNew;
+		LockFreeMemoryPool<Chunk>	_Pool;
+		alignas(64) __int64			_TotalUseCount;
 	};
 }
 
