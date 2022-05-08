@@ -211,7 +211,11 @@ namespace univ_dev
             //Player 생성 및 초기화
             player = this->_PlayerPool.Alloc();
             if (player->_Logined == true)
+            {
+                //DispatchError(2030102, sessionID, L"ERRRRRRR");
+                this->_PlayerPool.Free(player);
                 return;
+            }
             player->_AccountNo = accountNo;
             packet->GetBuffer((char*)player->_ID, 40);
             packet->GetBuffer((char*)player->_NickName, 40);
@@ -244,6 +248,12 @@ namespace univ_dev
 
         (*packet) >> accountNo >> sectorX >> sectorY;
 
+        if (sectorX >= 50 || sectorY >= 50)
+        {
+            this->DisconnectSession(sessionID);
+            return;
+        }
+
         Player* player = this->FindPlayer(sessionID);
         if (player == nullptr)
         {
@@ -255,7 +265,7 @@ namespace univ_dev
             this->DisconnectSession(sessionID);
             return;
         }
-
+        
         constexpr WORD comp = -1;
         if (player->_SectorX != comp && player->_SectorY != comp)
         {
@@ -314,7 +324,6 @@ namespace univ_dev
         for (int y = 0; y < 3; y++)
         {
             if (((beginY + y) < 0) || (beginY + y) >= 50) continue;
-
             for (int x = 0; x < 3; x++)
             {
                 if (((beginX + x) < 0) || ((beginX + x) >= 50)) continue;
@@ -371,25 +380,30 @@ namespace univ_dev
     {
         auto iter = this->_PlayerMap.find(sessionID);
 
-        if (iter == this->_PlayerMap.end()) return;
-
+        if (iter == this->_PlayerMap.end())
+        {
+            //DispatchError(11111, sessionID, L"RemovePlayer iter is end");
+            return;
+        }
         Player* removePlayer = iter->second;
 
         constexpr WORD comp = -1;
         WORD sectorX = removePlayer->_SectorX;
         WORD sectorY = removePlayer->_SectorY;
 
-        if (sectorX == comp || sectorY == comp) return;
-
-        for (auto iter = _Sector[sectorY][sectorX].begin(); iter != _Sector[sectorY][sectorX].end(); ++iter)
+        if (sectorX != comp && sectorY != comp)
         {
-            if ((*iter)->_SessionID == sessionID)
+            for (auto iter = _Sector[sectorY][sectorX].begin(); iter != _Sector[sectorY][sectorX].end(); ++iter)
             {
-                _Sector[sectorY][sectorX].erase(iter);
-                removePlayer->_Logined = false;
-                break;
+                if ((*iter)->_SessionID == sessionID)
+                {
+                    _Sector[sectorY][sectorX].erase(iter);
+                    break;
+                }
             }
         }
+
+        removePlayer->_Logined = false;
         this->_PlayerMap.erase(sessionID);
         this->_PlayerPool.Free(removePlayer);
     }
