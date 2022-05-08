@@ -229,6 +229,11 @@ namespace univ_dev
 		closesocket(this->_ListenSocket);
 	}
 
+	void CLanServer::PostOnClientLeave(ULONGLONG sessionID)
+	{
+		PostQueuedCompletionStatus(_IOCP, 0, sessionID, (LPOVERLAPPED)0xffffffff);
+	}
+
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// 에러났을때 에러코드 저장하면서 OnErrorOccured 호출
@@ -660,9 +665,7 @@ namespace univ_dev
 			packet = session->_SendPacketBuffer[i];
 			if (packet != nullptr)
 			{
-				PRO_BEGIN("Free");
 				Packet::Free(packet);
-				PRO_END("Free");
 			}
 			else
 				CRASH();
@@ -689,24 +692,18 @@ namespace univ_dev
 			InterlockedIncrement(&this->_TotalPacket);
 			InterlockedIncrement(&this->_RecvPacketPerSec);
 
-			PRO_BEGIN("Alloc");
 			Packet* recvPacket = Packet::Alloc();
 			recvPacket->AddRef();
 			recvPacket->MoveReadPtr(NET_HEADER_SIZE);
-			PRO_END("Alloc");
 			LanServerHeader header;
 			if (this->TryGetCompletedPacket(session, recvPacket, header))
 				this->OnRecv(session->_SessionID, recvPacket);
 			else
 			{
-				PRO_BEGIN("Free");
 				Packet::Free(recvPacket);
-				PRO_END("Free");
 				break;
 			}
-			PRO_BEGIN("Free");
 			Packet::Free(recvPacket);
-			PRO_END("Free");
 		}
 		this->RecvPost(session);
 	}
@@ -839,6 +836,12 @@ namespace univ_dev
 					this->DispatchError(dfNCWORKER_OVERLAPPED_IS_NULL, err, L"GQCS returned and overlapped is nullptr");
 					continue;
 				}
+			}
+			else if (over == (OVERLAPPED*)0xffffffff)
+			{
+				this->OnClientLeave(completionKey);
+				//PushSessionIndex(completionKey & 0xffff);
+				continue;
 			}
 			sessionID = (ULONGLONG)completionKey;
 			job = (OverlappedEx*)over;
@@ -1050,6 +1053,23 @@ namespace univ_dev
 		ZeroMemory(newSession->_SessionIPStr, sizeof(newSession->_SessionIPStr));
 		this->GetStringIP(newSession->_SessionIPStr, 20, clientaddr);
 
+		WCHAR err[512];
+		if (newSession->_SendBufferCount > 0)
+		{
+			wsprintf(err, L"Session : %llu SendBufferCount is not Cleaned up size : %d", (sessionID << 16) | idx, newSession->_SendBufferCount);
+			DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, 0, err);
+			for (int i = 0; i < newSession->_SendBufferCount; i++)
+				Packet::Free(newSession->_SendPacketBuffer[i]);
+		}
+		Packet* packet;
+		if (newSession->_SendPacketQueue.size() > 0)
+		{
+			wsprintf(err, L"Session : %llu SendBufferQueue is not Cleaned up size : %d", (sessionID << 16) | idx, newSession->_SendPacketQueue.size());
+			DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, 0, err);
+			while (newSession->_SendPacketQueue.dequeue(packet))
+				Packet::Free(packet);
+		}
+
 		InterlockedIncrement(&newSession->_IOCounts);
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
@@ -1057,7 +1077,8 @@ namespace univ_dev
 		newSession->_RingBuffer.ClearBuffer();
 		newSession->_SessionID = (sessionID << 16) | idx;
 		newSession->_Sock = sock;
-		newSession->_IOCounts &= 0x7fffffff;
+		//newSession->_IOCounts &= 0x7fffffff;
+		InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
 		InterlockedExchange(&newSession->_IOFlag, false);
 		InterlockedIncrement(&this->_CurSessionCount);
 		CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
@@ -1131,8 +1152,9 @@ namespace univ_dev
 		while (session->_SendPacketQueue.dequeue(packet))
 			Packet::Free(packet);
 
-		this->OnClientLeave(sessionID);
+		this->PostOnClientLeave(sessionID);
 		this->PushSessionIndex(idx);
+		//this->OnClientLeave(sessionID);
 		InterlockedDecrement(&_CurSessionCount);
 		InterlockedIncrement(&_TotalReleasedSession);
 		return;

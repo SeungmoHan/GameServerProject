@@ -1,6 +1,6 @@
 #pragma once
-#ifndef __SERVER_CORE_CLASS_DEF__
-#define __SERVER_CORE_CLASS_DEF__
+#ifndef __LANSERVER_CORE_CLASS_DEF__
+#define __LANSERVER_CORE_CLASS_DEF__
 #define __UNIV_DEVELOPER_
 
 #include "CoreBase.h"
@@ -65,6 +65,8 @@ namespace univ_dev
 		virtual void OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID) = 0;
 		virtual void OnClientLeave(ULONGLONG sessionID) = 0; // Release»ƒ »£√‚
 		virtual void OnTimeOut(ULONGLONG sessionID) = 0;
+
+		void PostOnClientLeave(ULONGLONG sessionID);
 
 	protected:
 		//------------------------------------------------------------------------------------------------
@@ -215,4 +217,4 @@ namespace univ_dev
 
 
 
-#endif // !__SERVER_CORE_CLASS_DEF__
+#endif // !__LANSERVER_CORE_CLASS_DEF__
