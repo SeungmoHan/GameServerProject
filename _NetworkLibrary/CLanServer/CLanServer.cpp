@@ -1070,16 +1070,16 @@ namespace univ_dev
 				Packet::Free(packet);
 		}
 
-		InterlockedIncrement(&newSession->_IOCounts);
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
 		newSession->_LastRecvdTime = timeGetTime();
 		newSession->_RingBuffer.ClearBuffer();
 		newSession->_SessionID = (sessionID << 16) | idx;
-		newSession->_Sock = sock;
-		//newSession->_IOCounts &= 0x7fffffff;
-		InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
 		InterlockedExchange(&newSession->_IOFlag, false);
+		InterlockedIncrement(&newSession->_IOCounts);
+		InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
+		InterlockedExchange(&newSession->_Sock, sock);
+		newSession->_Sock = sock;
 		InterlockedIncrement(&this->_CurSessionCount);
 		CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
 		return newSession;
@@ -1140,7 +1140,7 @@ namespace univ_dev
 
 		ULONGLONG sessionID = session->_SessionID;
 		DWORD idx = sessionID & 0xffff;
-		closesocket(session->_Sock);
+		closesocket(session->_Sock & 0x7fffffff);
 
 		DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
 		Packet* packet = nullptr;
@@ -1154,7 +1154,6 @@ namespace univ_dev
 
 		this->PostOnClientLeave(sessionID);
 		this->PushSessionIndex(idx);
-		//this->OnClientLeave(sessionID);
 		InterlockedDecrement(&_CurSessionCount);
 		InterlockedIncrement(&_TotalReleasedSession);
 		return;
@@ -1170,7 +1169,8 @@ namespace univ_dev
 	{
 		Session* disconnectSession = this->AcquireSession(sessionID);
 		if (disconnectSession == nullptr) return;
-		CancelIoEx((HANDLE)disconnectSession->_Sock, nullptr);
+		SOCKET sock = InterlockedOr((long*)&disconnectSession->_Sock, 0x80000000);
+		CancelIoEx((HANDLE)(sock & 0x7fffffff), nullptr);
 		ReturnSession(disconnectSession);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
