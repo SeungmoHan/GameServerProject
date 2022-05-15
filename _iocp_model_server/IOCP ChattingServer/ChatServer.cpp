@@ -212,6 +212,10 @@ namespace univ_dev
             player = this->_PlayerPool.Alloc();
             if (player->_Logined == true)
             {
+	   //이미 풀에 반환된 player가 false가 아닌경우라면 CRASH나야하는 경우
+	   //만약 반환 안된 노드가 풀에있어도 CRASH나야하는 경우
+	   //여긴 들어왔다하면 결함임
+	   CRASH();
                 //DispatchError(2030102, sessionID, L"ERRRRRRR");
                 this->_PlayerPool.Free(player);
                 return;

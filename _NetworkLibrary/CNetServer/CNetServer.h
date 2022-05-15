@@ -150,6 +150,7 @@ namespace univ_dev
 		HANDLE									_RunningEvent;
 
 
+private:
 
 		//Error and codes
 		static DWORD							_ServerOnFlag;
