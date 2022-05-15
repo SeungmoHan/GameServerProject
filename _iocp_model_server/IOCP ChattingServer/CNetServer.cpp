@@ -60,6 +60,7 @@ namespace univ_dev
 	//RecvPost -> WSARecv call
 	void CNetServer::RecvPost(Session* session)
 	{
+
 		int recvRet;
 		WSABUF recvWSABuf[2];
 		recvWSABuf[0].buf = session->_RingBuffer.GetWritePtr();
@@ -70,6 +71,7 @@ namespace univ_dev
 			recvWSABuf[1].len = 0;
 		DWORD flag = 0;
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
+
 		InterlockedIncrement(&session->_IOCounts);
 		recvRet = WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
@@ -77,7 +79,8 @@ namespace univ_dev
 			int err = WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				if (err != 10053 && err != 10054 && err != 10064)
+				CancelIoEx((HANDLE)session->_Sock, nullptr);
+				if (err != 10053 && err != 10054 && err != 10064 && err != 10038)
 				{
 					WCHAR errorStr[512] = { L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING" };
 					this->DispatchError(dfNCWORKER_WSARECV_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, errorStr);
@@ -123,14 +126,17 @@ namespace univ_dev
 		}
 
 		InterlockedExchange(&session->_SendBufferCount, cnt);
+
 		InterlockedIncrement(&session->_IOCounts);
+
 		sendRet = WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				if (err != 10053 && err != 10054 && err != 10064)
+				CancelIoEx((HANDLE)session->_Sock, nullptr);
+				if (err != 10053 && err != 10054 && err != 10064 && err != 10038)
 				{
 					WCHAR errStr[512];
 					wsprintf(errStr, L"SendPost::WSAGetLastError return value is %u sessionID is %llu", err, session->_SessionID);
@@ -619,7 +625,8 @@ namespace univ_dev
 				return false;
 			}
 			wsprintf(errStr, L"TryAccept::WSAGetLastError return value is %u", err);
-			this->DispatchError(dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, errStr);
+			DispatchError(dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, errStr);
+			this->DispatchError(dfNCACCEPT_CLIENT_SOCKET_IS_INVALID_SOCKET, err, errStr);
 		}
 		clientSocket = sock;
 		if (_SessionIdx.size() == 0)
@@ -648,16 +655,25 @@ namespace univ_dev
 		if (pkRet1 != NET_HEADER_SIZE)
 		{
 			wsprintf(errStr, L"TryGetCompletedPacket::RB first Peek return value is NET_HEADER_SIZE sessionID is %llu",session->_SessionID);
-			DispatchError(dfNCWORKER_USE_SIZE_OVER_HEADER_SIZE_AND_FIRST_PEEK_ZERO, 0, errStr);
+			this->DispatchError(dfNCWORKER_USE_SIZE_OVER_HEADER_SIZE_AND_FIRST_PEEK_ZERO, 0, errStr);
+			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
 		if (header._ByteCode != 0x77)
 		{
-			DisconnectSession(session->_SessionID);
+			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
 		//recv링버퍼에서 피크 했을때 payloadSize랑 합한것보다 링버퍼 사이즈가 작으면 다음번으로 넘긴다.
-		if (session->_RingBuffer.GetUseSize() < NET_HEADER_SIZE + header._Len) return false;
+		if (session->_RingBuffer.GetUseSize() < NET_HEADER_SIZE + header._Len)
+		{
+			if (header._Len > 10000)
+			{
+				this->DispatchError(dfNCWORKER_HEADER_LEN_OVER_RINGBUFFER_SIZE, header._Len, L"TryGetCompletedPacket::Header_Len Over RingBufferSize");
+				DisconnectSession(session->_SessionID);
+			}
+			return false;
+		}
 
 		//recv 링버퍼에서 데이터를 꺼냈으니 ReadPointer를 증가시켜서 UseSize를 줄여야함.
 		session->_RingBuffer.MoveReadPtr(pkRet1);
@@ -666,7 +682,8 @@ namespace univ_dev
 		if (pkRet2 != header._Len)
 		{
 			wsprintf(errStr, L"TryGetCompletedPacket::RB second Peek return value is header._Len sessionID is %llu", session->_SessionID);
-			DispatchError(dfNCWORKER_USE_SIZE_OVER_PAYLOAD_SIZE_AND_SECOND_PEEK_ZERO, 0, errStr);
+			this->DispatchError(dfNCWORKER_USE_SIZE_OVER_PAYLOAD_SIZE_AND_SECOND_PEEK_ZERO, 0, errStr);
+			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
 		packet->MoveWritePtr(pkRet2);
@@ -679,7 +696,8 @@ namespace univ_dev
 		packet->Decode();
 		if (!packet->VerifyCheckSum())
 		{
-			DisconnectSession(session->_SessionID);
+			this->DispatchError(dfNCWORKER_CHECKSUM_WRONG, header._CheckSum, L"TryGetCompletedPacket::Header_Len Over RingBufferSize");
+			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
 		session->_RingBuffer.MoveReadPtr(pkRet2);
@@ -867,7 +885,8 @@ namespace univ_dev
 			}
 			else if (over == (OVERLAPPED*)0xffffffff)
 			{
-				OnClientLeave(completionKey);
+				Session* session = FindSession(completionKey);
+				this->OnClientLeave(completionKey);
 				continue;
 			}
 			sessionID = (ULONGLONG)completionKey;
@@ -965,6 +984,12 @@ namespace univ_dev
 				ReleaseSession(session);
 			return nullptr;
 		}
+		//if ((session->_Sock & 0x80000000) != 0)
+		//{
+		//	if (InterlockedDecrement(&session->_IOCounts) == 0)
+		//		ReleaseSession(session);
+		//	return nullptr;
+		//}
 		return session;
 	}
 
@@ -1008,16 +1033,15 @@ namespace univ_dev
 				Packet::Free(packet);
 		}
 
-
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
 		newSession->_LastRecvdTime = timeGetTime();
 		newSession->_SessionID = (sessionID << 16) | idx;
 		newSession->_RingBuffer.ClearBuffer();
-		newSession->_Sock = sock;
-		newSession->_IOFlag = false;
+		InterlockedExchange(&newSession->_IOFlag, false);
 		InterlockedIncrement(&newSession->_IOCounts);
 		InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
+		InterlockedExchange(&newSession->_Sock, sock);
 		InterlockedIncrement(&this->_CurSessionCount);
 		CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
 		return newSession;
@@ -1083,12 +1107,10 @@ namespace univ_dev
 		if (InterlockedCompareExchange(&session->_IOCounts, 0x80000000, 0) != 0)
 			return;
 		if (session->_SessionID != sessionID)
-		{
-			InterlockedAnd((long*)session->_IOCounts, 0x7fffffff);
 			return;
-		}
+
 		DWORD idx = sessionID & 0xffff;
-		closesocket(session->_Sock);
+		closesocket(session->_Sock & 0x7fffffff);
 
 		DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
 		Packet* packet = nullptr;
@@ -1100,8 +1122,8 @@ namespace univ_dev
 		while (session->_SendPacketQueue.dequeue(packet))
 			Packet::Free(packet);
 		session->_IOFlag = false;
-		this->PostOnClientLeave(sessionID);
 		this->PushSessionIndex(idx);
+		this->PostOnClientLeave(sessionID);
 		InterlockedDecrement(&_CurSessionCount);
 		InterlockedIncrement(&_TotalReleasedSession);
 		return;
@@ -1117,7 +1139,8 @@ namespace univ_dev
 	{
 		Session* disconnectSession = this->AcquireSession(sessionID);
 		if (disconnectSession == nullptr) return;
-		CancelIoEx((HANDLE)disconnectSession->_Sock, nullptr);
+		SOCKET sock = InterlockedOr((long*)&disconnectSession->_Sock, 0x80000000);
+		CancelIoEx((HANDLE)(sock & 0x7fffffff), nullptr);
 		ReturnSession(disconnectSession);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------

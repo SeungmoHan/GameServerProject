@@ -19,6 +19,7 @@ namespace univ_dev
 	class ChatServer : public CNetServer
 	{
 	private:
+		constexpr static int INVALID_PLAYER_SECTOR = 51;
 		constexpr static int SECTOR_X_SIZE = 50;
 		constexpr static int SECTOR_Y_SIZE = 50;
 
@@ -68,8 +69,8 @@ namespace univ_dev
 		HANDLE									_UpdateThread;
 		HANDLE									_MoniteringThread;
 
-
 		LockFreeQueue<JobMessage>				_JobQueue;
+		HANDLE									_DequeueEvent;
 		LockFreeMemoryPool<Player>				_PlayerPool;
 		LockFreeMemoryPoolTLS<JobMessage>		_JobMessagePool;
 

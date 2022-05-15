@@ -115,11 +115,15 @@ enum CHAT_PACKET_TYPE
 	// 서버는 40초 이상동안 메시지 수신이 없는 클라이언트를 강제로 끊어줘야 함.
 	//------------------------------------------------------------	
 
+	// 하트비트 오는지 체크할용도
+	HEART_BEAT,
 	// Client가 나갔을때 Packet*는 nullptr인 상태로 ON_CLIENT_LEAVE메시지가 푸쉬된다.
 	ON_CLIENT_LEAVE,
 
 	// Library에서 세션이 TimeOut에 걸리게되면 Packet*는 nullptr인 상태로 ON_TIME_OUT메시지가 푸쉬된다.
 	ON_TIME_OUT,
+	
+
 };
 
 #endif // !__CHAT_SERVER_PACKET_DEFEINE__

@@ -15,15 +15,16 @@ namespace univ_dev
 
         while (this->_RunningFlag)
         {
+            WaitForSingleObject(this->_DequeueEvent, INFINITE);
             JobMessage job;
-            if (!this->_JobQueue.dequeue(job))
-                continue;
-
-            this->PacketProc(job._Packet, job._SessionID, job._Type);
-
-            if (job._Packet != nullptr)
+            while (this->_JobQueue.dequeue(job))
             {
-                Packet::Free(job._Packet);
+                this->PacketProc(job._Packet, job._SessionID, job._Type);
+
+                if (job._Packet != nullptr)
+                {
+                    Packet::Free(job._Packet);
+                }
             }
         }
         return 0;
@@ -45,6 +46,7 @@ namespace univ_dev
                 {
                     this->_RunningFlag = false;
                     this->CNetServer::PostNetServerStop();
+                    SetEvent(_DequeueEvent);
                     WaitForSingleObject(_UpdateThread, INFINITE);
                     return 0;
                 }
@@ -187,13 +189,17 @@ namespace univ_dev
             }
             case CHAT_PACKET_TYPE::ON_TIME_OUT:
             {
+                this->DispatchError(ERR_CHAT_TIME_OUT, sessionID, L"On Time Out API Err : sessionID");
                 this->DisconnectSession(sessionID);
-                DispatchError(ERR_CHAT_TIME_OUT, sessionID, L"On Time Out API Err : sessionID");
                 break;
+            }
+            case CHAT_PACKET_TYPE::HEART_BEAT:
+            {
+                this->PacketProcHeartBeating(packet, sessionID);
             }
             default:
             {
-                DispatchError(ERR_CHAT_WRONG_PACKET_TYPE, ERR_CHAT_WRONG_PACKET_TYPE, L"Packet Type is Default");
+                this->DispatchError(ERR_CHAT_WRONG_PACKET_TYPE, type, L"Packet Type is Default");
                 this->DisconnectSession(sessionID);
                 break;
             }
@@ -212,12 +218,7 @@ namespace univ_dev
             player = this->_PlayerPool.Alloc();
             if (player->_Logined == true)
             {
-	   //이미 풀에 반환된 player가 false가 아닌경우라면 CRASH나야하는 경우
-	   //만약 반환 안된 노드가 풀에있어도 CRASH나야하는 경우
-	   //여긴 들어왔다하면 결함임
-	   CRASH();
-                //DispatchError(2030102, sessionID, L"ERRRRRRR");
-                this->_PlayerPool.Free(player);
+                CRASH();
                 return;
             }
             player->_AccountNo = accountNo;
@@ -230,15 +231,17 @@ namespace univ_dev
             player->_Logined = true;
             status = true;
             this->InsertPlayer(sessionID, player);
+            player->_LastAction = 1;
         }
 
         Packet* resLoginPacket = Packet::Alloc();
-        this->MakePacketResponseLogin(resLoginPacket, player->_AccountNo, status);
+        this->MakePacketResponseLogin(resLoginPacket, accountNo, status);
 
         this->SendPacket(sessionID, resLoginPacket);
+        //login 실패시 보내고 끊기
         if (status == false)
         {
-            DispatchError(10101010, 20202020, L"Login Request -> player is not nullptr");
+            this->DispatchError(10101010, 20202020, L"Login Request -> player is not nullptr");
             this->DisconnectSession(sessionID);
         }
         InterlockedIncrement(&_LoginTPS);
@@ -252,25 +255,26 @@ namespace univ_dev
 
         (*packet) >> accountNo >> sectorX >> sectorY;
 
-        if (sectorX >= 50 || sectorY >= 50)
-        {
-            this->DisconnectSession(sessionID);
-            return;
-        }
-
         Player* player = this->FindPlayer(sessionID);
+        //플레이어가 만들어지지도 않았는데 move sector 들어오는케이스
         if (player == nullptr)
         {
             this->DisconnectSession(sessionID);
             return;
         }
+        //로그인을 안했거나 기록된 AccountNum이 잘못된 경우
         else if (player->_Logined == false || accountNo != player->_AccountNo)
         {
             this->DisconnectSession(sessionID);
             return;
         }
-        
+        //날라온 섹터의 값이 50이상일경우
         constexpr WORD comp = -1;
+        if (sectorX >= 50 || sectorY >= 50)
+        {
+            this->DisconnectSession(sessionID);
+            return;
+        }
         if (player->_SectorX != comp && player->_SectorY != comp)
         {
             for (auto iter = this->_Sector[player->_SectorY][player->_SectorX].begin();
@@ -287,7 +291,7 @@ namespace univ_dev
         player->_SectorY = sectorY;
 
         this->_Sector[player->_SectorY][player->_SectorX].emplace(player);
-
+        player->_LastAction = 2;
         Packet* moveSectorPacket = Packet::Alloc();
         this->MakePacketResponseMoveSector(moveSectorPacket, player->_AccountNo, player->_SectorX, player->_SectorY);
         this->SendPacket(sessionID, moveSectorPacket);
@@ -302,6 +306,7 @@ namespace univ_dev
         (*packet) >> accountNo >> messageLen;
         packet->GetBuffer((char*)message, messageLen);
 
+        constexpr WORD comp = -1;
         Player* player = this->FindPlayer(sessionID);
         if (player == nullptr)
         {
@@ -313,9 +318,14 @@ namespace univ_dev
             this->DisconnectSession(sessionID);
             return;
         }
-        
-        int beginY = player->_SectorY - 1;
+        else if (player->_SectorX == comp || player->_SectorY == comp)
+        {
+            this->DisconnectSession(sessionID);
+            return;
+        }
+
         int beginX = player->_SectorX - 1;
+        int beginY = player->_SectorY - 1;
 
         message[messageLen / 2] = '\0';
         if (wcscmp(L"=", message) == 0)
@@ -323,8 +333,9 @@ namespace univ_dev
 
         Packet* messagePacket = Packet::Alloc();
         messagePacket->AddRef();
-        MakePacketResponseMessage(messagePacket, player->_AccountNo, player->_ID, player->_NickName, messageLen, message);
+        this->MakePacketResponseMessage(messagePacket, player->_AccountNo, player->_ID, player->_NickName, messageLen, message);
 
+        player->_LastAction = 3;
         for (int y = 0; y < 3; y++)
         {
             if (((beginY + y) < 0) || (beginY + y) >= 50) continue;
@@ -348,7 +359,7 @@ namespace univ_dev
         Player* player = FindPlayer(sessionID);
         if (player == nullptr)
         {
-            DisconnectSession(sessionID);
+            this->DisconnectSession(sessionID);
             return;
         }
     }
@@ -386,7 +397,7 @@ namespace univ_dev
 
         if (iter == this->_PlayerMap.end())
         {
-            //DispatchError(11111, sessionID, L"RemovePlayer iter is end");
+            DisconnectSession(sessionID);
             return;
         }
         Player* removePlayer = iter->second;
@@ -394,9 +405,11 @@ namespace univ_dev
         constexpr WORD comp = -1;
         WORD sectorX = removePlayer->_SectorX;
         WORD sectorY = removePlayer->_SectorY;
-
-        if (sectorX != comp && sectorY != comp)
+        do
         {
+            removePlayer->_Logined = false;
+            if (sectorX == comp || sectorY == comp)
+                break;
             for (auto iter = _Sector[sectorY][sectorX].begin(); iter != _Sector[sectorY][sectorX].end(); ++iter)
             {
                 if ((*iter)->_SessionID == sessionID)
@@ -405,9 +418,7 @@ namespace univ_dev
                     break;
                 }
             }
-        }
-
-        removePlayer->_Logined = false;
+        } while (0);
         this->_PlayerMap.erase(sessionID);
         this->_PlayerPool.Free(removePlayer);
     }
@@ -449,41 +460,25 @@ namespace univ_dev
         job._Packet = recvPacket;
         *(job._Packet) >> job._Type;
         this->_JobQueue.enqueue(job);
+        SetEvent(this->_DequeueEvent);
     }
 
     void ChatServer::OnErrorOccured(DWORD errorCode, const WCHAR* error)
     {
         WCHAR timeStr[50]{ 0 };
         WCHAR dayStr[50]{ 0 };
-        WCHAR temp[20]{ 0 };
         tm t;
         time_t cur = time(nullptr);
         localtime_s(&t, &cur);
         DWORD afterBegin = timeGetTime() - GetBeginTime();
-        _itow_s(t.tm_year + 1900, temp, 10);
-        wcscat_s(timeStr, temp);
-        wcscat_s(timeStr, L"_");
-        wcscat_s(dayStr, temp);
-        wcscat_s(dayStr, L"_");
-        _itow_s(t.tm_mon + 1, temp, 10);
-        wcscat_s(timeStr, temp);
-        wcscat_s(timeStr, L"_");
-        wcscat_s(dayStr, temp);
-        wcscat_s(dayStr, L"_");
-        _itow_s(t.tm_mday, temp, 10);
-        wcscat_s(timeStr, temp);
-        wcscat_s(timeStr, L"_");
-        wcscat_s(dayStr, temp);
-        wcscat_s(dayStr, L"_");
-        _itow_s(t.tm_hour, temp, 10);
-        wcscat_s(timeStr, temp);
-        wcscat_s(timeStr, L"_");
-        _itow_s(t.tm_min, temp, 10);
-        wcscat_s(timeStr, temp);
+        wsprintf(timeStr, L"%d/%d/%d/%d:%d:%d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+        wsprintf(dayStr, L"%d/%d/%d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);;
 
+        char errFileName[260];
+        sprintf_s(errFileName, "%d_%d_%d_libraryErrorLog.txt", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
         FILE* errorLog = nullptr;
         while (errorLog == nullptr)
-            fopen_s(&errorLog, "%s_libraryErrorLog.txt", "ab");
+            fopen_s(&errorLog, errFileName, "ab");
 
         fwprintf(errorLog, L"Error Occured At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin / 1000, errorCode, error, GetLastAPIErrorCode());
         fclose(errorLog);
@@ -506,6 +501,7 @@ namespace univ_dev
         message._Type = CHAT_PACKET_TYPE::ON_CLIENT_LEAVE;
         message._Packet = nullptr;
         this->_JobQueue.enqueue(message);
+        SetEvent(this->_DequeueEvent);
     }
 
     void ChatServer::OnTimeOut(ULONGLONG sessionID)
@@ -514,7 +510,8 @@ namespace univ_dev
         timeOutJob._SessionID = sessionID;
         timeOutJob._Type = CHAT_PACKET_TYPE::ON_TIME_OUT;
         timeOutJob._Packet = nullptr;
-        _JobQueue.enqueue(timeOutJob);
+        this->_JobQueue.enqueue(timeOutJob);
+        SetEvent(this->_DequeueEvent);
     }
 
     void ChatServer::Start()
@@ -545,6 +542,13 @@ namespace univ_dev
             this->_RunningFlag = false;
             return;
         }
+        this->_DequeueEvent = CreateEvent(nullptr, false, false, nullptr);
+        if (this->_DequeueEvent == nullptr)
+        {
+            this->_RunningFlag = false;
+            return;
+        }
+
         this->_RunningFlag = true;
         this->CNetServer::Run();
     }
@@ -553,7 +557,6 @@ namespace univ_dev
     {
         HANDLE thread[2]{ this->_UpdateThread, this->_MoniteringThread };
         WaitForMultipleObjects(2, thread, true, INFINITE);
-
         for (int i = 0; i < SECTOR_Y_SIZE; i++)
             delete[] _Sector[i];
         delete[] _Sector;

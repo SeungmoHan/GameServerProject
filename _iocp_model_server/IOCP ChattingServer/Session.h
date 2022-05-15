@@ -19,7 +19,7 @@ namespace univ_dev
 
     struct Session
     {
-        Session() : _SessionID(0), _SendBufferCount(0), _SendPacketBuffer{ 0 }, _Sock(0), _SessionIP(0), _SessionPort(0), _SessionIPStr{ 0 }, _IOCounts(0x80000000), _IOFlag(0), _LastRecvdTime(0)
+        Session() : _SessionID(0), _SendBufferCount(0), _SendPacketBuffer{ 0 }, _Sock(0), _SessionIP(0), _SessionPort(0), _SessionIPStr{ 0 }, _IOCounts(0x80000000), _IOFlag(0), _LastRecvdTime(0), _DisconnectFlag(true)
         {
 
         }
@@ -36,6 +36,7 @@ namespace univ_dev
         OverlappedEx _SendJob;
         Packet* _SendPacketBuffer[SESSION_SEND_PACKER_BUFFER_SIZE];
         LockFreeQueue<Packet*> _SendPacketQueue;
+        alignas(64) DWORD _DisconnectFlag;
         alignas(64) DWORD _SendBufferCount;
         alignas(64) DWORD _IOCounts;
         alignas(64) DWORD _IOFlag;

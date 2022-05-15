@@ -34,6 +34,8 @@
 #define dfNCINIT_ACCEPT_THREAD_CREATE_FAILED 8007
 
 #define dfNCINIT_RUNNING_EVENT_CREATE_FAILED 8008
+#define dfNCINIT_DEQUEUE_EVENT_CREATE_FAILED 8009
+
 
 //---------------------------------------------------------------
 // NetCore AcceptThread Error Code
@@ -64,4 +66,8 @@
 #define dfNCWORKER_SESSION_SOCK_ZERO 1107
 
 #define dfNCWORKER_PACKET_DQ_LENGTH_NOT_CORRECT 1108
+
+#define dfNCWORKER_HEADER_LEN_OVER_RINGBUFFER_SIZE 1110
+#define dfNCWORKER_CHECKSUM_WRONG 1111
+
 #endif // !__NET_CORE_ERROR_DEFINE__

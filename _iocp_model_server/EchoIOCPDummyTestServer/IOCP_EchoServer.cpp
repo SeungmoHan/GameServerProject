@@ -150,9 +150,7 @@ namespace univ_dev
 	{
 		ULONGLONG data;
 		unsigned short packetSize = 8;
-		PRO_BEGIN("Alloc");
 		Packet* sendPacket = Packet::Alloc();
-		PRO_END("Alloc");
 		(*packet) >> data;
 		(*sendPacket) << data;
 		SendPacket(sessionID, sendPacket);
