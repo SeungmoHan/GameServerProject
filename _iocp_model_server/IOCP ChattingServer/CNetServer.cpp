@@ -73,7 +73,8 @@ namespace univ_dev
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 
 		InterlockedIncrement(&session->_IOCounts);
-		recvRet = WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
+		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		recvRet = WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
@@ -129,7 +130,8 @@ namespace univ_dev
 
 		InterlockedIncrement(&session->_IOCounts);
 
-		sendRet = WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
+		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		sendRet = WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
@@ -1033,6 +1035,7 @@ namespace univ_dev
 				Packet::Free(packet);
 		}
 
+
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
 		newSession->_LastRecvdTime = timeGetTime();
@@ -1139,7 +1142,7 @@ namespace univ_dev
 	{
 		Session* disconnectSession = this->AcquireSession(sessionID);
 		if (disconnectSession == nullptr) return;
-		SOCKET sock = InterlockedOr((long*)&disconnectSession->_Sock, 0x80000000);
+		SOCKET sock = InterlockedOr64((LONG64*)&disconnectSession->_Sock, 0x80000000);
 		CancelIoEx((HANDLE)(sock & 0x7fffffff), nullptr);
 		ReturnSession(disconnectSession);
 	}

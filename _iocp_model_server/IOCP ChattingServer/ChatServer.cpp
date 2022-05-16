@@ -241,7 +241,7 @@ namespace univ_dev
         //login 실패시 보내고 끊기
         if (status == false)
         {
-            this->DispatchError(10101010, 20202020, L"Login Request -> player is not nullptr");
+            this->DispatchError(sessionID, 20202020, L"Login Request -> player is not nullptr");
             this->DisconnectSession(sessionID);
         }
         InterlockedIncrement(&_LoginTPS);
@@ -263,10 +263,14 @@ namespace univ_dev
             return;
         }
         //로그인을 안했거나 기록된 AccountNum이 잘못된 경우
-        else if (player->_Logined == false || accountNo != player->_AccountNo)
+        else if (player->_Logined == false)
         {
             this->DisconnectSession(sessionID);
             return;
+        }
+        else if (accountNo != player->_AccountNo)
+        {
+            this->DisconnectSession(sessionID);
         }
         //날라온 섹터의 값이 50이상일경우
         constexpr WORD comp = -1;
@@ -313,10 +317,14 @@ namespace univ_dev
             this->DisconnectSession(sessionID);
             return;
         }
-        else if (player->_Logined == false || player->_AccountNo != accountNo)
+        else if (player->_Logined == false)
         {
             this->DisconnectSession(sessionID);
             return;
+        }
+        else if (accountNo != player->_AccountNo)
+        {
+            this->DisconnectSession(sessionID);
         }
         else if (player->_SectorX == comp || player->_SectorY == comp)
         {
