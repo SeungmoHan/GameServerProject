@@ -42,12 +42,12 @@ namespace univ_dev
 		void AddRef();
 		bool SubRef();
 		virtual ~Packet();
+		int GetBufferSize();
 	protected:
 		void Release();
 
 		void Clear();
 
-		int GetBufferSize();
 		unsigned char* GetReadPtr();
 		unsigned char* GetWritePtr();
 		unsigned char* GetBeginPtr();

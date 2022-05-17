@@ -31,6 +31,7 @@ namespace univ_dev
 
 		friend class CLanServer;
 		friend class CNetServer;
+		//friend class LockFreeMemoryPool<Packet>;
 		enum PacketSize
 		{
 			DefaultSize = MSS
@@ -47,6 +48,7 @@ namespace univ_dev
 		void Release();
 
 		void Clear();
+
 
 		unsigned char* GetReadPtr();
 		unsigned char* GetWritePtr();

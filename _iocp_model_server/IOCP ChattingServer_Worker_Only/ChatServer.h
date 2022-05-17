@@ -3,6 +3,7 @@
 #define __CHAT_SERVER__
 #define __UNIV_DEVELOPER_
 
+#include "ChatServerErrorDefine.h"
 #include "CNetServer.h"
 #include "JobMessage.h"
 #include "Player.h"
@@ -19,14 +20,28 @@ namespace univ_dev
 	class ChatServer : public CNetServer
 	{
 	private:
+		struct Sector
+		{
+			std::unordered_set<Player*> _PlayerSet;
+			SRWLOCK _SectorLock;
+			Sector()
+			{
+				_PlayerSet.clear();
+				InitializeSRWLock(&_SectorLock);
+			}
+		};
+
 		constexpr static int INVALID_PLAYER_SECTOR = 51;
 		constexpr static int SECTOR_X_SIZE = 50;
 		constexpr static int SECTOR_Y_SIZE = 50;
+		constexpr static int ID_MAX_LEN = 20;
+		constexpr static int ID_MAX_SIZE = 40;
+		constexpr static int NICK_NAME_MAX_LEN = 20;
+		constexpr static int NICK_NAME_MAX_SIZE = 40;
+		constexpr static int TOKEN_KEY_SIZE = 64;
 
-		friend unsigned __stdcall UpdateThread(void* param);
 		friend unsigned __stdcall MoniteringThread(void* param);
 
-		unsigned int ChatServerUpdateThread(void* param);
 		unsigned int ChatServerMoniteringThread(void* param);
 
 
@@ -69,13 +84,15 @@ namespace univ_dev
 		HANDLE									_UpdateThread;
 		HANDLE									_MoniteringThread;
 
+
 		LockFreeQueue<JobMessage>				_JobQueue;
-		HANDLE									_DequeueEvent;
 		LockFreeMemoryPool<Player>				_PlayerPool;
 		LockFreeMemoryPoolTLS<JobMessage>		_JobMessagePool;
 
-		std::unordered_set<Player*>**			_Sector;
+		//std::unordered_set<Player*>**			_Sector;
+		Sector**								_Sector;
 		std::unordered_map<ULONGLONG,Player*>	_PlayerMap;
+		SRWLOCK									_PlayerMapLock;
 
 		ULONGLONG _SectorMoveTPS;
 		ULONGLONG _ChatTPS;
