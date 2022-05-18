@@ -58,6 +58,9 @@ namespace univ_dev
 		void RemovePlayer(ULONGLONG sessionID);
 		Player* FindPlayer(ULONGLONG sessionID);
 
+
+		LogClass _ChatServerLog;
+
 		void Start();
 		void Close();
 	public:

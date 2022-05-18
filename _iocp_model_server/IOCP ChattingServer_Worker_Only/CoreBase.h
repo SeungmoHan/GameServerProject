@@ -15,6 +15,7 @@
 #include "LockFreeQueue.hpp"
 #include "LockFreeStack.hpp"
 #include "LockFreeMemoryPoolTLS.hpp"
+#include "LogClass.h"
 
 #define CRASH() do{int*ptr =nullptr; *ptr =100;}while(0)
 

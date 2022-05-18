@@ -165,6 +165,7 @@ namespace univ_dev
 
     void ChatServer::PacketProc(Packet* packet, ULONGLONG sessionID,WORD type)
     {
+        WCHAR errStr[512];
         switch (type)
         {
             case CHAT_PACKET_TYPE::PACKET_CS_CHAT_REQ_LOGIN:
@@ -189,7 +190,8 @@ namespace univ_dev
             }
             case CHAT_PACKET_TYPE::ON_TIME_OUT:
             {
-                this->DispatchError(ERR_CHAT_TIME_OUT, sessionID, L"On Time Out API Err : sessionID");
+                wsprintf(errStr, L"Time Out Error SessionID : %I64u", sessionID);
+                this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
                 this->DisconnectSession(sessionID);
                 break;
             }
@@ -199,7 +201,8 @@ namespace univ_dev
             }
             default:
             {
-                this->DispatchError(ERR_CHAT_WRONG_PACKET_TYPE, type, L"Packet Type is Default");
+                wsprintf(errStr, L"Session Default Case SessionID : %I64u", sessionID);
+                this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
                 this->DisconnectSession(sessionID);
                 break;
             }
@@ -208,18 +211,23 @@ namespace univ_dev
 
     void ChatServer::PacketProcRequestLogin(Packet* packet, ULONGLONG sessionID)
     {
+        WCHAR errStr[512];
         BYTE status = false;
         INT64 accountNo;
 
         if (packet->GetBufferSize() < sizeof(accountNo))
         {
-            DisconnectSession(sessionID);
+            wsprintf(errStr, L"PacketProcRequestLogin Packet BufferSize < sizeof(accountNo) SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
+            this->DisconnectSession(sessionID);
             return;
         }
         (*packet) >> accountNo;
         if (packet->GetBufferSize() != ID_MAX_SIZE + NICK_NAME_MAX_SIZE + TOKEN_KEY_SIZE)
         {
-            DisconnectSession(sessionID);
+            wsprintf(errStr, L"PacketProcRequestLogin Packet Available Packet Length is not enough SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
+            this->DisconnectSession(sessionID);
             return;
         }
 
@@ -261,13 +269,16 @@ namespace univ_dev
 
     void ChatServer::PacketProcMoveSector(Packet* packet, ULONGLONG sessionID)
     {
+        WCHAR errStr[512];
         INT64 accountNo;
         WORD sectorX;
         WORD sectorY;
         
         if (packet->GetBufferSize() != (sizeof(accountNo) + sizeof(sectorX) + sizeof(sectorY)))
         {
-            DisconnectSession(sessionID);
+            wsprintf(errStr, L"PacketProcMoveSector Packet Length is not enough SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
+            this->DisconnectSession(sessionID);
             return;
         }
         
@@ -277,26 +288,36 @@ namespace univ_dev
         //플레이어가 만들어지지도 않았는데 move sector 들어오는케이스
         if (player == nullptr)
         {
+            wsprintf(errStr, L"PacketProcMoveSector FindPlayer returned nullptr SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
         //로그인을 안했거나 기록된 AccountNum이 잘못된 경우
         else if (player->_Logined == false)
         {
+            wsprintf(errStr, L"PacketProcMoveSector Player Already Logined SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
         else if (accountNo != player->_AccountNo)
         {
-            this->DisconnectSession(sessionID);
-        }
-        //날라온 섹터의 값이 50이상일경우
-        constexpr WORD comp = -1;
-        if (sectorX >= 50 || sectorY >= 50)
-        {
+            wsprintf(errStr, L"PacketProcMoveSector Player AccountNo is wrong SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
+        //날라온 섹터의 값이 50이상일경우
+        else if (sectorX >= 50 || sectorY >= 50)
+        {
+            wsprintf(errStr, L"PacketProcMoveSector Player Sector X : %d, Sector Y : %d SessionID : %I64u", sectorX, sectorY, sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
+            this->DisconnectSession(sessionID);
+            return;
+        }
+
+        constexpr WORD comp = -1;
         if (player->_SectorX != comp && player->_SectorY != comp)
         {
             for (auto iter = this->_Sector[player->_SectorY][player->_SectorX].begin();
@@ -322,12 +343,15 @@ namespace univ_dev
 
     void ChatServer::PacketProcChatRequire(Packet* packet, ULONGLONG sessionID)
     {
+        WCHAR errStr[512];
         INT64 accountNo;
         WORD messageLen;
         WCHAR message[512];
 
         if (packet->GetBufferSize() < sizeof(accountNo) + sizeof(messageLen))
         {
+            wsprintf(errStr, L"PacketProcChatRequire Packet BufferSize is not enough SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
@@ -335,29 +359,38 @@ namespace univ_dev
 
         if (packet->GetBufferSize() != messageLen)
         {
+            wsprintf(errStr, L"PacketProcChatRequire Packet BufferSize is not MessageLen SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
         packet->GetBuffer((char*)message, messageLen);
 
-        constexpr WORD comp = -1;
         Player* player = this->FindPlayer(sessionID);
         if (player == nullptr)
         {
+            wsprintf(errStr, L"PacketProcChatRequire FindPlayer returned nullptr SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
         else if (player->_Logined == false)
         {
+            wsprintf(errStr, L"PacketProcChatRequire Player Already Logined SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
-        else if (accountNo != player->_AccountNo)
+        else if (player->_AccountNo != accountNo)
         {
+            wsprintf(errStr, L"PacketProcChatRequire Player AccountNo is wrong SessionID : %I64u", sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
         }
-        else if (player->_SectorX == comp || player->_SectorY == comp)
+        else if (player->_SectorX >= 50 || player->_SectorY >= 50)
         {
+            wsprintf(errStr, L"PacketProcChatRequire Player Sector X : %d, Sector Y : %d SessionID : %I64u", player->_SectorX, player->_SectorY, sessionID);
+            this->_ChatServerLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
             this->DisconnectSession(sessionID);
             return;
         }
@@ -502,23 +535,24 @@ namespace univ_dev
 
     void ChatServer::OnErrorOccured(DWORD errorCode, const WCHAR* error)
     {
-        WCHAR timeStr[50]{ 0 };
-        WCHAR dayStr[50]{ 0 };
-        tm t;
-        time_t cur = time(nullptr);
-        localtime_s(&t, &cur);
-        DWORD afterBegin = timeGetTime() - GetBeginTime();
-        wsprintf(timeStr, L"%d/%d/%d/%d:%d:%d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
-        wsprintf(dayStr, L"%d/%d/%d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);;
+        //WCHAR timeStr[50]{ 0 };
+        //WCHAR dayStr[50]{ 0 };
+        //tm t;
+        //time_t cur = time(nullptr);
+        //localtime_s(&t, &cur);
+        //DWORD afterBegin = timeGetTime() - GetBeginTime();
+        //wsprintf(timeStr, L"%d/%d/%d/%d:%d:%d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+        //wsprintf(dayStr, L"%d/%d/%d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);;
 
-        char errFileName[260];
-        sprintf_s(errFileName, "%d_%d_%d_libraryErrorLog.txt", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
-        FILE* errorLog = nullptr;
-        while (errorLog == nullptr)
-            fopen_s(&errorLog, errFileName, "ab");
+        //char errFileName[260];
+        //sprintf_s(errFileName, "%d_%d_%d_libraryErrorLog.txt", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+        //FILE* errorLog = nullptr;
+        //while (errorLog == nullptr)
+        //    fopen_s(&errorLog, errFileName, "ab");
 
-        fwprintf(errorLog, L"Error Occured At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin / 1000, errorCode, error, GetLastAPIErrorCode());
-        fclose(errorLog);
+        //fwprintf(errorLog, L"Error Occured At : %s, %u, err code : %u : %s api err : %d\n", timeStr, afterBegin / 1000, errorCode, error, GetLastAPIErrorCode());
+        //fclose(errorLog);
+        _ChatServerLog.LOG(error, LogClass::LogLevel::LOG_LEVEL_LIBRARY);
     }
 
     bool ChatServer::OnConnectionRequest(WCHAR* ipStr, DWORD ip, USHORT port)
@@ -566,6 +600,9 @@ namespace univ_dev
         {
             this->_Sector[i] = new std::unordered_set<Player*>[SECTOR_X_SIZE];
         }
+
+        _ChatServerLog.LOG_SET_DIRECTORY(L"Chat_Server_Log");
+        _ChatServerLog.LOG_SET_LEVEL(LogClass::LogLevel::LOG_LEVEL_SYSTEM);
 
         this->_MoniteringThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
         if (this->_MoniteringThread == nullptr)

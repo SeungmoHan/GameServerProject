@@ -639,7 +639,7 @@ namespace univ_dev
 		if (_SessionIdx.size() == 0)
 		{
 			closesocket(sock);
-			DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"session container size is over than max session counts");
+			this->DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"session container size is over than max session counts");
 			clientSocket = INVALID_SOCKET;
 		}
 

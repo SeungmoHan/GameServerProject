@@ -84,6 +84,8 @@ namespace univ_dev
 		HANDLE									_UpdateThread;
 		HANDLE									_MoniteringThread;
 
+		LogClass								_ChatServerLog;
+
 
 		LockFreeQueue<JobMessage>				_JobQueue;
 		LockFreeMemoryPool<Player>				_PlayerPool;
