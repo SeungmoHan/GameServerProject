@@ -27,8 +27,8 @@ namespace univ_dev
 	public:
 		void	SendPacket(ULONGLONG sessionID, Packet* packet);
 		bool	GetNetCoreInitializeFlag() { return _ServerOnFlag; }
-		DWORD	GetLastCoreErrno() { return _ErrorCode; }
-		DWORD	GetLastAPIErrno() { return _APIErrorCode; }
+		DWORD	GetNetCoreErrorCode() { return _ErrorCode; }
+		DWORD	GetLastAPIErrorCode() { return _APIErrorCode; }
 		void	DisconnectSession(ULONGLONG sessionID);
 		void	Run();
 
@@ -81,6 +81,7 @@ namespace univ_dev
 		void		SendProc(Session* session, DWORD byteTransfered);
 		//------------------------------------------------------------------------------------------------
 
+
 		//------------------------------------------------------------------------------------------------
 		//실제 WSASend, WSARecv호출하는 함수
 		void		RecvPost(Session* session);
@@ -121,6 +122,7 @@ namespace univ_dev
 		//------------------------------------------------------------------------------------------------
 		void		SetSessionTimer(Session* session);
 
+
 		//------------------------------------------------------------------------------------------------
 		// 세션 생성및 삭제함수
 		Session*	CreateSession(SOCKET key, sockaddr_in clientaddr, ULONGLONG sessionID);
@@ -150,9 +152,9 @@ namespace univ_dev
 		BOOL									_ShutDownFlag;
 		HANDLE									_RunningEvent;
 
-		DWORD									_ServerTime;
 
-private:
+		//Logging Class
+		LogClass _LibraryLog;
 
 		//Error and codes
 		static DWORD							_ServerOnFlag;
@@ -164,7 +166,6 @@ private:
 		CRITICAL_SECTION						_SessionMapLock;
 		Session*								_SessionArr;
 		LockFreeStack<DWORD>					_SessionIdx;
-
 
 
 		bool		PopSessionIndex(DWORD& ret);
