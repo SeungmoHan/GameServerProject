@@ -5,5 +5,7 @@
 ### IOCP 기반의 Lock을 사용하지 않는 Network Library 네트워크 라이브러리를 개발중입니다.
 
 
-### https://univ-developer.tistory.com/
-### https://www.linkedin.com/in/seungmo-han-aa102823a/
+### 기술 블로그 :  https://univ-developer.tistory.com/
+### 일촌 해주세요 ㅋㅋㅋ : https://www.linkedin.com/in/seungmo-han-aa102823a/
+
+### how to connect : gkstmdah97@naver.com
