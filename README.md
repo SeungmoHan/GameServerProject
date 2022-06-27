@@ -6,6 +6,3 @@
 
 
 ### 기술 블로그 :  https://univ-developer.tistory.com/
-### 일촌 해주세요 ㅋㅋㅋ : https://www.linkedin.com/in/seungmo-han-aa102823a/
-
-### how to connect : gkstmdah97@naver.com
