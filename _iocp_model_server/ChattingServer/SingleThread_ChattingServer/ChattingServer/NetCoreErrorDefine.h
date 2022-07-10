@@ -36,6 +36,11 @@
 #define dfNCINIT_RUNNING_EVENT_CREATE_FAILED 8008
 #define dfNCINIT_DEQUEUE_EVENT_CREATE_FAILED 8009
 
+#define dfNCINIT_MONITORING_EVENT_CREATE_FAILED 8010
+
+#define dfNCINIT_CONFIG_READ_FAILED 8011
+
+#define dfNCINIT_SEND_THREAD_CREATE_FAILED 8012
 
 //---------------------------------------------------------------
 // NetCore AcceptThread Error Code

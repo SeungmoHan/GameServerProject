@@ -6,7 +6,6 @@
 #include "CoreBase.h"
 #include "NetCoreErrorDefine.h"
 #include "Session.h"
-
 #include <stack>
 
 //#define dfMAX_NUM_OF_THREAD 16
@@ -23,39 +22,59 @@ namespace univ_dev
 	{
 	public:
 		~CNetServer();
-		CNetServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts);
+		CNetServer();
+	protected:
+		void	InitNetServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts,DWORD timeOutClock);
 	public:
+		void	SendToMoniteringSession(Packet* packet);
 		void	SendPacket(ULONGLONG sessionID, Packet* packet);
 		bool	GetNetCoreInitializeFlag() { return _ServerOnFlag; }
-		DWORD	GetNetCoreErrorCode() { return _ErrorCode; }
-		DWORD	GetLastAPIErrorCode() { return _APIErrorCode; }
+		DWORD	GetLastCoreErrno() { return _ErrorCode; }
+		DWORD	GetLastAPIErrno() { return _APIErrorCode; }
 		void	DisconnectSession(ULONGLONG sessionID);
-		void	Run();
+		void	Run(HANDLE* threadArr, size_t size);
 
-
+		void	MonitoringLog(WCHAR* logStr,LogClass::LogLevel level)
+		{
+			this->_MonitoringLog.LOG(logStr, level);
+		}
 	private:
 		//------------------------------------------------------------------------------------------------
 		// 서버 시작 종료함수
-		void CNetServerStartup();
-		void CNetServerCleanup();
+		void Startup();
+		void Cleanup();
 		//------------------------------------------------------------------------------------------------
 
 
 		//------------------------------------------------------------------------------------------------
 		// _beginthreadex함수에 전달되는 함수포인터들 param 은 this
-		friend unsigned __stdcall WorkerThread(void* param);
-		friend unsigned __stdcall AcceptThread(void* param);
-		friend unsigned __stdcall TimeOutThread(void* param);
-		//friend unsigned __stdcall MoniteringThread(void* param);
+		friend unsigned __stdcall _NET_WorkerThread(void* param);
+		friend unsigned __stdcall _NET_AcceptThread(void* param);
+		friend unsigned __stdcall _NET_TimeOutThread(void* param);
+		friend unsigned __stdcall _NET_MoniteringConnectThread(void* param);
+		friend unsigned __stdcall _NET_SendThread(void* param);
+
 
 		// 실제 러닝 스레드들이 호출할 함수들
 		unsigned int CNetServerWorkerThread(void* param);
 		unsigned int CNetServerAcceptThread(void* param);
 		unsigned int CNetServerTimeOutThread(void* param);
-		//unsigned int CNetServerMoniteringThread(void* param);
+		unsigned int CNetServerMoniteringThread(void* param);
+		unsigned int CNetServerSendThread(void* param);
+
 		//------------------------------------------------------------------------------------------------
 
 
+		//------------------------------------------------------------------------------------------------
+		// 모니터링 서버 연결함수 -> 끊어지면 재연결 계속 반복
+		void ConnectMonitoringSession();
+		void RecvFromMonitoringSession();
+	protected:
+		inline void WaitForMoniteringSignal()
+		{
+			WaitForSingleObject(this->_MonitoringSignal, 2000);
+		}
+	private:
 		//------------------------------------------------------------------------------------------------
 		//가상함수 -> 오버라이딩 필수
 		virtual void OnRecv(ULONGLONG sessionID, Packet* recvPacket) = 0;
@@ -64,12 +83,22 @@ namespace univ_dev
 		virtual void OnClientJoin(WCHAR* ipStr, DWORD ip, USHORT port, ULONGLONG sessionID) = 0;
 		virtual void OnClientLeave(ULONGLONG sessionID) = 0; // Release후 호출
 		virtual void OnTimeOut(ULONGLONG sessionID) = 0;
+		virtual void OnSend(ULONGLONG sessionID) = 0;
 
-		void PostOnClientLeave(ULONGLONG sessionID);
+		inline void PostOnClientLeave(ULONGLONG sessionID)
+		{
+			PostQueuedCompletionStatus(_IOCP, 0, sessionID, (LPOVERLAPPED)0xffffffff);
+		}
 	protected:
 		//------------------------------------------------------------------------------------------------
-		//에러가 있을때 마지막 에러코드를 저장하고 OnErrorOccured함수 호출
-		void		DispatchError(DWORD errorCode, DWORD APIErrorCode, const WCHAR* error);
+		inline void DispatchError(DWORD errorCode, DWORD APIErrorCode, const WCHAR* errorStr)
+		{
+			//라이브러리 자체 에러코드 등록 및 API에러 코드 등록
+			this->_ErrorCode = errorCode;
+			this->_APIErrorCode = APIErrorCode;
+			// OnErrorOccured 함수는 라이브러리 에러코드를 전달하므로 GetLastAPIErrorCode 함수 호출해서 값을 얻어가야됨.
+			OnErrorOccured(errorCode, errorStr);
+		}
 		//------------------------------------------------------------------------------------------------
 	private:
 
@@ -97,13 +126,19 @@ namespace univ_dev
 		//------------------------------------------------------------------------------------------------
 		// 세션ID -> 세션포인터 
 		Session* FindAndLockSession(ULONGLONG sessionID);
-		Session* FindSession(ULONGLONG sessionID);
+		inline Session* FindSession(ULONGLONG sessionID)
+		{
+			return &this->_SessionArr[sessionID & 0xffff];
+		}
 		//------------------------------------------------------------------------------------------------
 
 
 		//------------------------------------------------------------------------------------------------
 		// 헬퍼함수 sockaddr_in 구조체를 넣으면 wide string 으로 반환
-		void		GetStringIP(WCHAR* str, DWORD bufferLen, sockaddr_in& addr);
+		inline void GetStringIP(WCHAR* str, DWORD bufferLen, sockaddr_in& addr)
+		{
+			wsprintf(str, L"%d.%d.%d.%d", addr.sin_addr.S_un.S_un_b.s_b1, addr.sin_addr.S_un.S_un_b.s_b2, addr.sin_addr.S_un.S_un_b.s_b3, addr.sin_addr.S_un.S_un_b.s_b4);
+		}
 		//------------------------------------------------------------------------------------------------
 
 
@@ -118,7 +153,10 @@ namespace univ_dev
 		//void		ReturnSession(ULONGLONG SessionID);
 		void		ReturnSession(Session* session);
 		//------------------------------------------------------------------------------------------------
-
+		inline void SetSessionTimer(Session* session)
+		{
+			InterlockedExchange(&session->_TimeOutTimer, timeGetTime());
+		}
 
 		//------------------------------------------------------------------------------------------------
 		// 세션 생성및 삭제함수
@@ -130,13 +168,15 @@ namespace univ_dev
 		//std::unordered_map<ULONGLONG, Session*> _SessionMap;
 		//------------------------------------------------------------------------------------------------
 
+		//USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts
 		//------------------------------------------------------------------------------------------------
 		// 서버에서 사용하는 변수들
 		// ReadOnly Variable
 		HANDLE									_IOCP;
 		SOCKET									_ListenSocket;
 		USHORT									_ServerPort;
-		//Thread Handler
+		UINT									_BackLogQueueSize;
+		//Thread Handle
 		HANDLE*									_WorkerThreads;
 		HANDLE									_AcceptThread;
 		HANDLE									_TimeOutThread;
@@ -147,10 +187,19 @@ namespace univ_dev
 		DWORD									_TimeOutClock;
 		//Server Status
 		BOOL									_ShutDownFlag;
-		HANDLE									_RunningEvent;
+		HANDLE									_ThreadStartEvent;
 
+		DWORD									_ServerTime;
 
-private:
+		HANDLE									_SendThread;
+
+		BOOL									_MoniteringFlag;
+		Session									_MonitoringServerSession;
+		HANDLE									_MoniteringConnectThread;
+
+		LogClass								_LibraryLog;
+		LogClass								_MonitoringLog;
+	private:
 
 		//Error and codes
 		static DWORD							_ServerOnFlag;
@@ -163,9 +212,14 @@ private:
 		Session*								_SessionArr;
 		LockFreeStack<DWORD>					_SessionIdx;
 
-
-		bool		PopSessionIndex(DWORD& ret);
-		void		PushSessionIndex(DWORD idx);
+		inline bool PopSessionIndex(DWORD& ret)
+		{
+			return this->_SessionIdx.pop(ret);
+		}
+		inline void PushSessionIndex(DWORD idx)
+		{
+			return this->_SessionIdx.push(idx);
+		}
 
 	private:
 		//Debug Field
@@ -174,43 +228,48 @@ private:
 		{
 			DWORD								_WorkerThreadCount;
 			DWORD								_RunningThreadCount;
-			ULONGLONG							_SessionCnt;
-			ULONGLONG							_TotalPacket;
-			ULONGLONG							_TotalProecessedBytes;
-			ULONGLONG							_TotalAcceptSession;
-			ULONGLONG							_TotalReleaseSession;
-			ULONGLONG							_SendPacketPerSec;
-			//마지막 GetMoniteringInfo 이후 PacketCount;
-			ULONGLONG							_RecvPacketCount;
-			ULONGLONG							_SendPacketCount;
-			//마지막 GetMoniteringInfo 이후 AcceptCount;
-			ULONGLONG							_AccpeptCount;
-			ULONGLONG							_LockFreeQueueSize;
-			ULONGLONG							_LockFreeQueueSizeAvr;
-			ULONGLONG							_LockFreeQueueCapacity;
-			ULONGLONG							_LockFreeMaxCapacity;
-			ULONGLONG							_LockFreeStackSize;
-			ULONGLONG							_LockFreeStackCapacity;
+			DWORD								_CurrentSessionCount;
+
+			ULONGLONG							_TotalProcessedBytes;
+
+			ULONGLONG							_TotalAcceptSessionCount;
+			ULONGLONG							_TotalReleaseSessionCount;
+
+			ULONGLONG							_TotalSendPacketCount;
+			ULONGLONG							_TotalRecvPacketCount;
+
+			DWORD								_SessionSendQueueSize;
+			DWORD								_SessionSendQueueCapacity;
+			DWORD								_SessionSendQueueMax;
+
+			DWORD								_SessionIndexStackSize;
+			DWORD								_SessionIndexStackCapacity;
 		};
 
-		void PostNetServerStop();
+		HANDLE									_MonitoringSignal;
+		inline void PostServerStop()
+		{
+			this->_ShutDownFlag = true;
+			closesocket(this->_ListenSocket);
+			this->_ListenSocket = INVALID_SOCKET;
+			TerminateThread(this->_TimeOutThread, 0);
+		}
+
 		alignas(64) ULONGLONG					_BeginTime;
 
 		// 패킷 처리 수치 및 패킷처리 완료 바이트수
 		alignas(64) ULONGLONG					_CurSessionCount;
-		alignas(64) ULONGLONG					_TotalPacket;
-		alignas(64) ULONGLONG					_RecvPacketPerSec;
-		alignas(64) ULONGLONG					_SendPacketPerSec;
 
-		alignas(64) LONGLONG					_TotalProcessedBytes;
+		alignas(64) ULONGLONG					_TotalSendPacketCount;
+		alignas(64) ULONGLONG					_TotalRecvPacketCount;
 
-		//Accept Thread에서 사용하는 변수
-		alignas(64) ULONGLONG					_AcceptPerSec;
-		alignas(64) ULONGLONG					_TotalAcceptSession;
-		alignas(64) ULONGLONG					_TotalReleasedSession;
+		alignas(64) ULONGLONG					_TotalProcessedBytes;
 
-		MoniteringInfo GetMoniteringInfo();
-		DWORD GetBeginTime()const { return _BeginTime; }
+		alignas(64) ULONGLONG					_TotalAcceptSessionCount;
+		alignas(64) ULONGLONG					_TotalReleaseSessionCount;
+
+		void GetMoniteringInfo(MoniteringInfo& ret);
+		inline DWORD GetBeginTime()const { return _BeginTime; }
 	};
 }
 

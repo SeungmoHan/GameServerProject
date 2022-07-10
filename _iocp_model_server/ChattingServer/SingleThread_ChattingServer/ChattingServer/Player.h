@@ -28,7 +28,7 @@ namespace univ_dev
 		WCHAR _ID[20];
 		WCHAR _NickName[20];
 		char _TokenKey[64];
-
+		//debug
 		DWORD _LastAction;
 	};
 }

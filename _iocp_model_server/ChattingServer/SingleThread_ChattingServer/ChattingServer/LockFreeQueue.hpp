@@ -29,29 +29,29 @@ namespace univ_dev
 
 		LockFreeQueue() : _Size(0), _Head(nullptr), _Tail(nullptr), /*_Pool(new LockFreeMemoryPool<Node>),*/ _HeadCheckCount(0), _TailCheckCount(0)
 		{
-			_Tail = _Head = this->_Pool.Alloc();
+			this->_Tail = this->_Head = this->_Pool.Alloc();
 		}
 		~LockFreeQueue()
 		{
 			for (int i = 0; i < _Size; i++)
 			{
 				T ret;
-				if (!dequeue(ret))
+				if (!this->dequeue(ret))
 					CRASH();
 			}
 		}
 
 		int size()
 		{
-			return _Size;
+			return this->_Size;
 		}
 		int GetUseCount()
 		{
-			return _Pool.GetUseCount();
+			return this->_Pool.GetUseCount();
 		}
 		int GetCapacityCount()
 		{
-			return _Pool.GetCapacityCount();
+			return this->_Pool.GetCapacityCount();
 		}
 
 		void enqueue(T val)

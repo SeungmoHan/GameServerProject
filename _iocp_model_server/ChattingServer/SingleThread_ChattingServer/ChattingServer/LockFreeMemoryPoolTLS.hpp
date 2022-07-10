@@ -27,9 +27,9 @@ namespace univ_dev
 		{
 			ObjectType* Alloc()
 			{
-				ObjectType* ret = (ObjectType*)&_ChunkArr[_AllocCount]._Value;
-				_ChunkArr[_AllocCount]._Chunk = this;
-				_AllocCount++;
+				ObjectType* ret = (ObjectType*)&this->_ChunkArr[this->_AllocCount]._Value;
+				this->_ChunkArr[this->_AllocCount]._Chunk = this;
+				this->_AllocCount++;
 				return ret;
 			}
 			void Clear()
@@ -49,7 +49,7 @@ namespace univ_dev
 		LockFreeMemoryPoolTLS(bool placementNew = false) : _TLS_PoolIdx(TlsAlloc()), _PlacementNew(placementNew), _TotalUseCount(0)/*, _Pool(new LockFreeMemoryPool<Chunk>(placementNew))*/ {};
 		~LockFreeMemoryPoolTLS()
 		{
-			TlsFree(_TLS_PoolIdx);
+			TlsFree(this->_TLS_PoolIdx);
 			//delete _Pool;
 		}
 
@@ -58,41 +58,41 @@ namespace univ_dev
 			Chunk* chunk = (Chunk*)TlsGetValue(_TLS_PoolIdx);
 			if (chunk == nullptr)
 			{
-				chunk = ChunkAlloc();
-				TlsSetValue(_TLS_PoolIdx, chunk);
+				chunk = this->ChunkAlloc();
+				TlsSetValue(this->_TLS_PoolIdx, chunk);
 			}
 
 			ObjectType* ret = chunk->Alloc();
-			if (chunk->_AllocCount >= MAX_CHUNK_SIZE)
-				TlsSetValue(_TLS_PoolIdx, ChunkAlloc());
+			if (chunk->_AllocCount >= this->MAX_CHUNK_SIZE)
+				TlsSetValue(this->_TLS_PoolIdx, this->ChunkAlloc());
 
-			if (_PlacementNew)
+			if (this->_PlacementNew)
 				new (ret) ObjectType();
-			InterlockedIncrement((unsigned long long*) & _TotalUseCount);
+			InterlockedIncrement((unsigned long long*) & this->_TotalUseCount);
 			return ret;
 		}
 
 		void Free(ObjectType* pObj)
 		{
 			ChunkNode* node = (ChunkNode*)pObj;
-			if (_PlacementNew)
+			if (this->_PlacementNew)
 				pObj->~ObjectType();
 
 			Chunk* chunk = node->_Chunk;
 
-			if (InterlockedIncrement(&chunk->_FreeCount) == MAX_CHUNK_SIZE)
-				ChunkFree(chunk);
-			InterlockedDecrement((unsigned long long*) & _TotalUseCount);
+			if (InterlockedIncrement(&chunk->_FreeCount) == this->MAX_CHUNK_SIZE)
+				this->ChunkFree(chunk);
+			InterlockedDecrement((unsigned long long*) & this->_TotalUseCount);
 		}
 
-		int GetUseCount() { return _Pool.GetUseCount(); }
-		int GetCapacityCount() { return _Pool.GetCapacityCount(); }
-		int GetTotalUseCount() { return _TotalUseCount; }
+		int GetUseCount() { return this->_Pool.GetUseCount(); }
+		int GetCapacityCount() { return this->_Pool.GetCapacityCount(); }
+		int GetTotalUseCount() { return this->_TotalUseCount; }
 
 	private:
 		Chunk* ChunkAlloc()
 		{
-			Chunk* newChunk = _Pool.Alloc();
+			Chunk* newChunk = this->_Pool.Alloc();
 			if (newChunk == nullptr)
 			{
 				CRASH();
@@ -105,7 +105,7 @@ namespace univ_dev
 		void ChunkFree(Chunk* chunk)
 		{
 			chunk->Clear();
-			_Pool.Free(chunk);
+			this->_Pool.Free(chunk);
 		}
 
 	private:
