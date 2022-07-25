@@ -29,16 +29,10 @@ namespace univ_dev
 				_PlayerSet.clear();
 				InitializeSRWLock(&_SectorLock);
 			}
-		};
 
-		constexpr static int INVALID_PLAYER_SECTOR = 51;
+		};
 		constexpr static int SECTOR_X_SIZE = 50;
 		constexpr static int SECTOR_Y_SIZE = 50;
-		constexpr static int ID_MAX_LEN = 20;
-		constexpr static int ID_MAX_SIZE = 40;
-		constexpr static int NICK_NAME_MAX_LEN = 20;
-		constexpr static int NICK_NAME_MAX_SIZE = 40;
-		constexpr static int TOKEN_KEY_SIZE = 64;
 
 		friend unsigned __stdcall MoniteringThread(void* param);
 
@@ -83,8 +77,6 @@ namespace univ_dev
 
 		HANDLE									_UpdateThread;
 		HANDLE									_MoniteringThread;
-
-		LogClass								_ChatServerLog;
 
 
 		LockFreeQueue<JobMessage>				_JobQueue;

@@ -149,8 +149,7 @@ namespace univ_dev
 		BOOL									_ShutDownFlag;
 		HANDLE									_RunningEvent;
 
-		//Logging Class
-		LogClass _LibraryLog;
+
 
 		//Error and codes
 		static DWORD							_ServerOnFlag;

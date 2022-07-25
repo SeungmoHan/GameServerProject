@@ -71,7 +71,7 @@ namespace univ_dev
 		DWORD flag = 0;
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		SOCKET sock = InterlockedOr((unsigned long long*)&session->_Sock, 0);
 		recvRet = WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
@@ -125,7 +125,7 @@ namespace univ_dev
 
 		InterlockedExchange(&session->_SendBufferCount, cnt);
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		SOCKET sock = InterlockedOr((unsigned long long*) & session->_Sock, 0);
 		sendRet = WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
@@ -528,7 +528,7 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// Send IO 비동기 처리를 위한 버퍼 사이즈 0 세팅
-		DWORD sendBufferSize = 0;
+		DWORD sendBufferSize = 1025 * 64;
 		printf("setsockopt -> Async Send Active Begin\n");
 		fprintf(MainThreadLogFile, "setsockopt -> Async Send Active Begin\n");
 		setsockopt(this->_ListenSocket, SOL_SOCKET, SO_SNDBUF, (const char*)&sendBufferSize, sizeof(sendBufferSize));
@@ -639,7 +639,7 @@ namespace univ_dev
 		if (_SessionIdx.size() == 0)
 		{
 			closesocket(sock);
-			this->DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"session container size is over than max session counts");
+			DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"session container size is over than max session counts");
 			clientSocket = INVALID_SOCKET;
 		}
 
@@ -713,7 +713,9 @@ namespace univ_dev
 	void CNetServer::SendProc(Session* session, DWORD byteTransfered)
 	{
 		InterlockedAdd64(&_TotalProcessedBytes, byteTransfered);
-		DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
+		//DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
+		DWORD sendCount = session->_SendBufferCount;
+		session->_SendBufferCount = 0;
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{
@@ -837,7 +839,7 @@ namespace univ_dev
 			Sleep(40000);
 			for (int i = 0; i < _MaxSessionCounts; i++)
 			{
-				if (InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) != 0) continue;
+				if ((this->_SessionArr[i]._IOCounts & 0x80000000) != 0) continue;
 				if (this->_SessionArr[i]._LastRecvdTime >= timeOutTimer) continue;
 				this->OnTimeOut(_SessionArr[i]._SessionID);
 			}
@@ -1017,35 +1019,13 @@ namespace univ_dev
 
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
-		DWORD sendCount = InterlockedExchange(&newSession->_SendBufferCount, 0);
-		Packet* packet = nullptr;
-		WCHAR errStr[512];
-		if (sendCount != 0)
-		{
-			wsprintf(errStr, L"Session %llu SendPacketBuffer is not Cleaned Up size : %d", (sessionID << 16) | idx, sendCount);
-			DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, (sessionID << 16) | idx, errStr);
-			for (int i = 0; i < (int)sendCount; i++)
-			{
-				packet = newSession->_SendPacketBuffer[i];
-				Packet::Free(packet);
-			}
-		}
-		int sendQueueSize = newSession->_SendPacketQueue.size();
-		if (sendQueueSize != 0)
-		{
-			wsprintf(errStr, L"Session %llu LockFreeQueue is not Cleaned Up size : %d", (sessionID << 16) | idx, newSession->_SendPacketQueue.size());
-			DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, (sessionID << 16) | idx, errStr);
-			while (newSession->_SendPacketQueue.dequeue(packet))
-				Packet::Free(packet);
-		}
-
+		
 		newSession->_LastRecvdTime = timeGetTime();
 		newSession->_RingBuffer.ClearBuffer();
 		newSession->_SessionID = (sessionID << 16) | idx;
 		InterlockedIncrement(&newSession->_IOCounts);
-		InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
-		//newSession->_Sock = sock;
-		InterlockedExchange((unsigned long long*) & newSession->_Sock, sock);
+		newSession->_IOCounts &= 0x7fffffff;
+		newSession->_Sock = sock;
 
 		InterlockedExchange(&newSession->_IOFlag, false);
 		InterlockedIncrement(&this->_CurSessionCount);
@@ -1111,6 +1091,7 @@ namespace univ_dev
 	{
 		if (InterlockedCompareExchange(&session->_IOCounts, 0x80000000, 0) != 0)
 			return;
+
 		ULONGLONG sessionID = session->_SessionID;
 		DWORD idx = sessionID & 0xffff;
 		closesocket(session->_Sock & 0x7fffffff);
@@ -1141,8 +1122,9 @@ namespace univ_dev
 	{
 		Session* disconnectSession = this->AcquireSession(sessionID);
 		if (disconnectSession == nullptr) return;
-		SOCKET sock = InterlockedOr64((LONG64*)&disconnectSession->_Sock, 0x80000000);
-		CancelIoEx((HANDLE)(sock & 0x7fffffff), nullptr);
+		SOCKET sock = InterlockedOr((long*)&disconnectSession->_Sock, 0x80000000);
+		if ((sock & 0x80000000) != 0)
+			CancelIoEx((HANDLE)sock, nullptr);
 		ReturnSession(disconnectSession);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------

@@ -117,18 +117,18 @@ namespace univ_dev
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
                     wsprintf(logStr, L"| Job Queue Size / Capacity / Total Count : %d / %d / %d", this->_JobQueue.size(), this->_JobQueue.GetCapacityCount(), this->_JobMessagePool.GetTotalUseCount());
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
-                    wsprintf(logStr, L"| Job Chunk Count / Capacity : %d / %d\n", this->_JobMessagePool.GetUseCount(), this->_JobMessagePool.GetCapacityCount());
+                    wsprintf(logStr, L"| Job Chunk Count / Capacity : %d / %d", this->_JobMessagePool.GetUseCount(), this->_JobMessagePool.GetCapacityCount());
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
                     wsprintf(logStr, L"|----------------------------------------USAGE_MONITER---------------------------------");
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
-                    wsprintf(logStr, L"| Available / NPPool / Private Mem : %I64uMb / %I64uMb / %I64uMb", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
+                    wsprintf(logStr, L"| Available / NPPool / Private Mem : %I64uMb / %I64uMb / %I64uKb", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
                     wsprintf(logStr, L"---------------------------------------------------------------------------------------");
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
                 }
                 else
                 {
-                    wsprintf(logStr, L"Available / NPPool / Private Mem : %I64uMb / %I64uMb / %I64uMb", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
+                    wsprintf(logStr, L"Available / NPPool / Private Mem : %I64uMb / %I64uMb / %I64uKb", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryKBytes());
                     this->MonitoringLog(logStr, LogClass::LogLevel::LOG_LEVEL_SYSTEM);
                 }
             }

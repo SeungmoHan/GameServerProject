@@ -157,7 +157,8 @@ namespace univ_dev
 		//------------------------------------------------------------------------------------------------
 		inline void SetSessionTimer(Session* session)
 		{
-			InterlockedExchange(&session->_TimeOutTimer, timeGetTime());
+			session->_TimeOutTimer = timeGetTime();
+			//InterlockedExchange(&session->_TimeOutTimer, timeGetTime());
 		}
 
 		//------------------------------------------------------------------------------------------------

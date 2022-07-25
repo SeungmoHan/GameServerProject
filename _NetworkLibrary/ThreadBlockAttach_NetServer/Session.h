@@ -21,24 +21,26 @@ namespace univ_dev
             : _SessionID(0), _SendBufferCount(0), _SendPacketBuffer{ 0 }, _Sock(0x80000000), _SessionIP(0), _Available{ false }, 
             _SessionPort(0), _SessionIPStr{ 0 }, _IOCounts(0x80000000), _IOFlag(0), _TimeOutTimer(0), _ThreadBlockIdx(-1){};
         //Read Only
-        volatile ULONGLONG      _SessionID;
-        volatile SOCKET         _Sock;
+        ULONGLONG               _SessionID;
+        SOCKET                  _Sock;
         DWORD                   _Available;
         ULONG                   _SessionIP;
         WCHAR                   _SessionIPStr[20];
         USHORT                  _SessionPort;
 
-        alignas(64) DWORD       _ThreadBlockIdx;
+        DWORD       _ThreadBlockIdx;
 
         alignas(64)
         OverlappedEx            _RecvJob;
         DWORD                   _TimeOutTimer;
         RingBuffer              _RingBuffer;
+        
         alignas(64)
         OverlappedEx            _SendJob;
         Packet*                 _SendPacketBuffer[SESSION_SEND_PACKER_BUFFER_SIZE];
         LockFreeQueue<Packet*>  _SendPacketQueue;
-        alignas(64) DWORD       _SendBufferCount;
+        DWORD                   _SendBufferCount;
+        
         alignas(64) DWORD       _IOCounts;
         alignas(64) DWORD       _IOFlag;
     };

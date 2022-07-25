@@ -83,7 +83,7 @@ namespace univ_dev
 	{
 		while (!this->_ShutDownFlag)
 		{
-			//Sleep(5);
+			Sleep(3);
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
 				if (!InterlockedOr((LONG*)&this->_SessionArr[i]._Available, 0))

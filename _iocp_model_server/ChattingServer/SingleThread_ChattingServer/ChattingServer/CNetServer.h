@@ -34,7 +34,7 @@ namespace univ_dev
 		void	DisconnectSession(ULONGLONG sessionID);
 		void	Run(HANDLE* threadArr, size_t size);
 
-		void	MonitoringLog(WCHAR* logStr,LogClass::LogLevel level)
+		inline void MonitoringLog(WCHAR* logStr,LogClass::LogLevel level)
 		{
 			this->_MonitoringLog.LOG(logStr, level);
 		}

@@ -3,36 +3,34 @@
 #include <conio.h>
 #include "CNetServer.h"
 
-
+//multithread
 namespace univ_dev
 {
-	DWORD CurIdx = 0;
-	DWORD TlsCountingIdx = 0;
 	DWORD CNetServer::_ServerOnFlag = false;
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//Worker Thread Wrapping function
 	// param CNetServer*
-	unsigned __stdcall WorkerThread(void* param)
+	unsigned __stdcall _NET_WorkerThread(void* param)
 	{
 		//TlsGetValue(TlsCountingIdx);
 		//WorkerThread -> NetCore::Run 이 호출될때까지 막혀있다가 NetCore::Run이 호출되어야 시작
-		CNetServer* core = (CNetServer*)param;
-		WaitForSingleObject(core->_RunningEvent, INFINITE);
-		return core->CNetServerWorkerThread(param);
+		CNetServer* server = (CNetServer*)param;
+		WaitForSingleObject(server->_RunningEvent, INFINITE);
+		return server->CNetServerWorkerThread(param);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//Accept Thread Wrapping function
 	// param CNetServer*
-	unsigned __stdcall AcceptThread(void* param)
+	unsigned __stdcall _NET_AcceptThread(void* param)
 	{
 		//AcceptThread -> NetCore::Run 이 호출될때까지 막혀있다가 NetCore::Run이 호출되어야 시작
-		CNetServer* core = (CNetServer*)param;
-		WaitForSingleObject(core->_RunningEvent, INFINITE);
-		return core->CNetServerAcceptThread(param);
+		CNetServer* server = (CNetServer*)param;
+		WaitForSingleObject(server->_RunningEvent, INFINITE);
+		return server->CNetServerAcceptThread(param);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -40,18 +38,32 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//TimeOut Thread Wrapping function
 	// param CNetServer*
-	unsigned __stdcall TimeOutThread(void* param)
+	unsigned __stdcall _NET_TimeOutThread(void* param)
 	{
 		if (param == nullptr)
 			return -1;
 		CNetServer* server = (CNetServer*)param;
+		WaitForSingleObject(server->_RunningEvent, INFINITE);
 		server->CNetServerTimeOutThread(server);
 		return 0;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
-
+		//---------------------------------------------------------------------------------------------------------------------------------
+	//---------------------------------------------------------------------------------------------------------------------------------
+	//Monitering Thread Wrapping Function
+	// param CNetServer*
+	unsigned __stdcall _NET_MoniteringConnectThread(void* param)
+	{
+		if (param == nullptr)
+			return -1;
+		CNetServer* server = (CNetServer*)param;
+		WaitForSingleObject(server->_RunningEvent, INFINITE);
+		return server->CNetServerMoniteringThread(server);
+	}
+	//---------------------------------------------------------------------------------------------------------------------------------
+	//---------------------------------------------------------------------------------------------------------------------------------
 
 
 
@@ -70,20 +82,17 @@ namespace univ_dev
 			recvWSABuf[1].len = 0;
 		DWORD flag = 0;
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
-
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		recvRet = WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
-		session->lastRecvPostTime = timeGetTime();
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		recvRet = WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				if (err != 10053 && err != 10054 && err != 10064 /*&& err != 10038*/)
+				if (err != 10054 && err != 10064)
 				{
-					WCHAR errorStr[512];
-					wsprintf(errorStr, L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING SessionID : %I64u", session->_SessionID);
+					WCHAR errorStr[512] = { L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING" };
 					this->DispatchError(dfNCWORKER_WSARECV_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, errorStr);
 				}
 				if (InterlockedDecrement(&session->_IOCounts) == 0)
@@ -95,12 +104,14 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 
 
+
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//SendPost -> WSASend call
 	void CNetServer::SendPost(Session* session)
 	{
 		if (InterlockedExchange(&session->_IOFlag, true) == true) return;
+
 		int numOfPacket = session->_SendPacketQueue.size();
 		int sendRet = 0;
 
@@ -124,33 +135,38 @@ namespace univ_dev
 			sendWSABuf[i].buf = (char*)packet->GetReadPtr();
 			sendWSABuf[i].len = packet->GetBufferSize();
 		}
-
-		InterlockedExchange(&session->_SendBufferCount, cnt);
-
+		session->_SendBufferCount = cnt;
+		//InterlockedExchange(&session->_SendBufferCount, cnt);
 		InterlockedIncrement(&session->_IOCounts);
-
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		sendRet = WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
-		session->lastSendPostTime = timeGetTime();
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		sendRet = WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				if (err != 10053 && err != 10054 && err != 10064 /*&& err != 10038*/)
-				{
-					WCHAR errStr[512];
-					wsprintf(errStr, L"SendPost::WSAGetLastError return value is %u sessionID is %I64u", err, session->_SessionID);
-					DispatchError(dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, errStr);
-				}
+				if (err != 10054 && err != 10064)
+					this->DispatchError(dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, L"WSASend ret is SOCKET_ERROR and error code is not WSA_IO_PENDING");
 				if (InterlockedDecrement(&session->_IOCounts) == 0)
-					ReleaseSession(session);
+					this->ReleaseSession(session);
 			}
 		}
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
+
+	void CNetServer::InitNetServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts, DWORD timeOutClock)
+	{
+		this->_ServerPort = port;
+		this->_BackLogQueueSize = backlogQueueSize;
+		this->_ThreadPoolSize = threadPoolSize;
+		this->_RunningThreadCount = runningThread;
+		this->_NagleOff = nagleOff;
+		this->_MaxSessionCounts = maxSessionCounts;
+		this->_TimeOutClock = timeOutClock;
+		this->Startup();
+	}
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -167,7 +183,6 @@ namespace univ_dev
 		}
 		//그게 아니라면 정상 송신
 		packet->SetNetHeader();
-		InterlockedIncrement(&this->_SendPacketPerSec);
 		session->_SendPacketQueue.enqueue(packet);
 		this->SendPost(session);
 		this->ReturnSession(session);
@@ -179,7 +194,7 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// Run 호출전에는 절대로 다른 스레드들이 작동하지 않음 주의바람
-	void CNetServer::Run()
+	void CNetServer::Run(HANDLE* threadArr, size_t size)
 	{
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
@@ -193,21 +208,27 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// 모든 스레드들이 작업이 끝날때까지 대기하는 메인스레드
-		HANDLE* runningThreads = new HANDLE[(size_t)this->_ThreadPoolSize + ACCEPT_THREAD_COUNT];
+		HANDLE* runningThreads = new HANDLE[(size_t)this->_ThreadPoolSize + ACCEPT_THREAD_COUNT + size];
 
-		for (int i = 0; i < (int)this->_ThreadPoolSize; i++)
+		int i = 0;
+		for (; i < (int)this->_ThreadPoolSize; i++)
 			runningThreads[i] = this->_WorkerThreads[i];
 
-		runningThreads[this->_ThreadPoolSize] = this->_AcceptThread;
-		//runningThreads[this->_ThreadPoolSize + 1] = this->_LogThread;
+		runningThreads[i++] = this->_AcceptThread;
 
-		WaitForMultipleObjects(this->_ThreadPoolSize + ACCEPT_THREAD_COUNT, runningThreads, true, INFINITE);
+		int j = i;
+
+		for (int k = 0; k < size; k++, j++)
+			runningThreads[j] = threadArr[k];
+
+		WaitForMultipleObjects(this->_ThreadPoolSize + ACCEPT_THREAD_COUNT + size, runningThreads, true, INFINITE);
 
 		delete[] runningThreads;
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
-
+		auto _ = _wmkdir(L"ServerLog");
+		auto __ = _wmkdir(L"ServerLog\\InitLog");
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		//종료 작업을 위한 로그 파일 오픈
@@ -217,7 +238,7 @@ namespace univ_dev
 		time_t currentTime = time(nullptr);
 		tm time;
 		localtime_s(&time, &currentTime);
-		sprintf_s(logFileName, "%d_%d_%d_ServerInitialize.txt", time.tm_year + 1900, time.tm_mon + 1, time.tm_mday);
+		sprintf_s(logFileName, "ServerLog\\InitLog\\%d_%d_%d_ServerInitialize.txt", time.tm_year + 1900, time.tm_mon + 1, time.tm_mday);
 
 		while (MainThreadLogFile == nullptr)
 		{
@@ -233,39 +254,20 @@ namespace univ_dev
 		fclose(MainThreadLogFile);
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
-
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
 
-	void CNetServer::PostOnClientLeave(ULONGLONG sessionID)
-	{
-		PostQueuedCompletionStatus(_IOCP, 0, sessionID, (LPOVERLAPPED)0xffffffff);
-	}
 
-	//---------------------------------------------------------------------------------------------------------------------------------
-	//---------------------------------------------------------------------------------------------------------------------------------
-	// 에러났을때 에러코드 저장하면서 OnErrorOccured 호출
-	void CNetServer::DispatchError(DWORD errorCode, DWORD APIErrorCode, const WCHAR* errorStr)
-	{
-		//라이브러리 자체 에러코드 등록 및 API에러 코드 등록
-		this->_ErrorCode = errorCode;
-		this->_APIErrorCode = APIErrorCode;
-		// OnErrorOccured 함수는 라이브러리 에러코드를 전달하므로 GetLastAPIErrorCode 함수 호출해서 값을 얻어가야됨.
-		OnErrorOccured(errorCode, errorStr);
-	}
-	//---------------------------------------------------------------------------------------------------------------------------------
-	//---------------------------------------------------------------------------------------------------------------------------------
 
 
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// CLanServer 초기화
-	void CNetServer::CNetServerStartup()
+	void CNetServer::Startup()
 	{
-		TlsCountingIdx = TlsAlloc();
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// 인터락으로 서버 플래그를 true로 만들었을때 내가 true로 만들어야지만
@@ -278,6 +280,15 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
+		this->_MoniteringEvent = CreateEvent(nullptr, false, false, nullptr);
+		if (this->_MoniteringEvent == nullptr)
+		{
+			this->_ErrorCode = dfNCINIT_MONITERING_EVENT_CREATE_FAILED;
+			return;
+		}
+
+		int _ = _wmkdir(L"ServerLog");
+		_ = _wmkdir(L"ServerLog\\InitLog");
 
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
@@ -287,15 +298,15 @@ namespace univ_dev
 		char tempStr[20]{ 0 };
 		time_t currentTime = time(nullptr);
 		tm time;
-		localtime_s(&time, &currentTime);
-		sprintf_s(logFileName, "%d_%d_%d_ServerInitialize.txt", time.tm_year + 1900, time.tm_mon + 1, time.tm_mday);
+		::localtime_s(&time, &currentTime);
+		::sprintf_s(logFileName, "ServerLog\\InitLog\\%d_%d_%d_ServerInitialize.txt", time.tm_year + 1900, time.tm_mon + 1, time.tm_mday);
 
 		while (MainThreadLogFile == nullptr)
 		{
-			fopen_s(&MainThreadLogFile, logFileName, "ab");
+			::fopen_s(&MainThreadLogFile, logFileName, "ab");
 		}
-		fprintf(MainThreadLogFile, "-------------------------------------------------------\n");
-		fprintf(MainThreadLogFile, "-------------------------------------------------------\n");
+		::fprintf(MainThreadLogFile, "-------------------------------------------------------\n");
+		::fprintf(MainThreadLogFile, "-------------------------------------------------------\n");
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
@@ -369,7 +380,7 @@ namespace univ_dev
 		printf("timeBeginPeriod, CSLocker Init, ProfilerSample Init Begin\n");
 		fprintf(MainThreadLogFile, "timeBeginPeriod, CSLocker Init, ProfilerSample Init Begin\n");
 		timeBeginPeriod(1);
-		InitializeCriticalSection(&_SessionMapLock);
+		InitializeCriticalSection(&this->_SessionMapLock); // 이건 사용안함
 		//InitializeSRWLock(&sessionMapLock);
 		//univ_dev::InitProfile();
 		fprintf(MainThreadLogFile, "timeBeginPeriod, CSLocker Init, ProfilerSample Init End\n");
@@ -380,26 +391,53 @@ namespace univ_dev
 
 
 
-		// 초단위 로깅용 스레드 생성
-		//printf("PrintThread CreateBegin\n");
-		//fprintf(MainThreadLogFile, "PrintThread CreateBegin\n");
-		//this->_LogThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
-		//if (this->_LogThread == nullptr)
-		//{
-		//	InterlockedExchange(&this->_ServerOnFlag, false);
-		//	this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
-		//	this->_APIErrorCode = GetLastError();
-		//	return;
-		//}
-		//fprintf(MainThreadLogFile, "PrintThread CreateEnd\n");
-		//printf("PrintThread CreateEnd\n");
-		//fflush(MainThreadLogFile);
+		// --------------------------------------------------------------------------------------------------------------
+		// --------------------------------------------------------------------------------------------------------------
+		// 초단위 모니터링 서버로 데이터 전송할 쓰레드
+		if (!g_ConfigReader.SetCurrentSection(L"NetServerConfig")) CRASH();
+		if (!g_ConfigReader.Find(L"MoniteringThreadOn")) CRASH();
+		this->_MoniteringFlag = g_ConfigReader.Get(L"MoniteringThreadOn", 1);
+		if (this->_MoniteringFlag)
+		{
+
+			size_t ret;
+			std::wstring serverIP;
+			char ip[20]{ 0 };
+			if (!g_ConfigReader.Find(L"MoniteringServerIP")) CRASH();
+			if (!g_ConfigReader.Find(L"MoniteringServerPort")) CRASH();
+			serverIP = g_ConfigReader.Get(L"MoniteringServerIP");
+			this->_MoniteringSession._SessionPort = g_ConfigReader.Get(L"MoniteringServerPort", 1);
+			::wcscpy_s(this->_MoniteringSession._SessionIPStr, serverIP.c_str());
+			::wcstombs_s(&ret, ip, this->_MoniteringSession._SessionIPStr, ::wcslen(this->_MoniteringSession._SessionIPStr));
+			::wprintf_s(L"Monitering Server IP : %s / PORT : %u\n", this->_MoniteringSession._SessionIPStr, this->_MoniteringSession._SessionPort);
+
+			this->_MoniteringSession._Sock = INVALID_SOCKET;
+			::printf("MoniteringThread CreateBegin\n");
+			::fprintf(MainThreadLogFile, "MoniteringThread CreateBegin\n");
+			this->_MoniteringConnectThread = (HANDLE)::_beginthreadex(nullptr, 0, _NET_MoniteringConnectThread, this, 0, nullptr);
+			if (this->_MoniteringConnectThread == nullptr)
+			{
+				::InterlockedExchange(&this->_ServerOnFlag, false);
+				this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
+				this->_APIErrorCode = ::GetLastError();
+				return;
+			}
+			::fprintf(MainThreadLogFile, "MoniteringThread CreateEnd\n");
+			::printf("MoniteringThread CreateEnd\n");
+			::fflush(MainThreadLogFile);
+
+		}
+		// --------------------------------------------------------------------------------------------------------------
+		// --------------------------------------------------------------------------------------------------------------
+
+
+
 
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		printf("PrintThread CreateBegin\n");
 		fprintf(MainThreadLogFile, "PrintThread CreateBegin\n");
-		_TimeOutThread = (HANDLE)_beginthreadex(nullptr, 0, TimeOutThread, this, 0, nullptr);
+		this->_TimeOutThread = (HANDLE)_beginthreadex(nullptr, 0, _NET_TimeOutThread, this, 0, nullptr);
 		if (this->_TimeOutThread == nullptr)
 		{
 			InterlockedExchange(&this->_ServerOnFlag, false);
@@ -411,19 +449,19 @@ namespace univ_dev
 		printf("PrintThread CreateEnd\n");
 		fflush(MainThreadLogFile);
 		// --------------------------------------------------------------------------------------------------------------
-// --------------------------------------------------------------------------------------------------------------
+		// --------------------------------------------------------------------------------------------------------------
 
 
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 		// 스레드풀 생성, 
 		// 스레드풀 사이즈는 0이면 systeminfo에서 받아온 논리코어 * 2개만큼 위에서적용
-		printf("ThreadPool CreateBegin\n");
+		printf("ThreadPool CreateBegin %d \n", this->_ThreadPoolSize);
 		fprintf(MainThreadLogFile, "ThreadPool CreateBegin\n");
 		this->_WorkerThreads = new HANDLE[this->_ThreadPoolSize];
 		for (int i = 0; i < (int)this->_ThreadPoolSize; i++)
 		{
-			this->_WorkerThreads[i] = (HANDLE)_beginthreadex(NULL, 0, WorkerThread, this, 0, NULL);
+			this->_WorkerThreads[i] = (HANDLE)_beginthreadex(NULL, 0, _NET_WorkerThread, this, 0, NULL);
 			if (this->_WorkerThreads[i] == NULL)
 			{
 				fclose(MainThreadLogFile);
@@ -585,7 +623,7 @@ namespace univ_dev
 		// Accept Thread 생성
 		printf("AcceptThread Create Begin\n");
 		fprintf(MainThreadLogFile, "AcceptThread Create Begin\n");
-		this->_AcceptThread = (HANDLE)_beginthreadex(nullptr, 0, AcceptThread, this, 0, nullptr);
+		this->_AcceptThread = (HANDLE)_beginthreadex(nullptr, 0, _NET_AcceptThread, this, 0, nullptr);
 		if (this->_AcceptThread == nullptr)
 		{
 			printf("AcceptThread is nullptr\n");
@@ -612,31 +650,29 @@ namespace univ_dev
 	BOOL CNetServer::TryAccept(SOCKET& clientSocket, sockaddr_in& clientAddr)
 	{
 		int addrlen = sizeof(clientAddr);
-		SOCKET sock = accept(this->_ListenSocket, (SOCKADDR*)&clientAddr, &addrlen);
+		SOCKET sock = ::accept(this->_ListenSocket, (SOCKADDR*)&clientAddr, &addrlen);
 		WCHAR errStr[512];
 		if (sock == INVALID_SOCKET)
 		{
-			int err = WSAGetLastError();
+			int err = ::WSAGetLastError();
 			if (err == WSAEINTR || err == WSAENOTSOCK || err == WSAEINVAL)
 			{
 				ULONG_PTR completionKey = (ULONG_PTR)0xffffffff;
 				DWORD byteTransfered = 0;
-				PostQueuedCompletionStatus(this->_IOCP, byteTransfered, completionKey, nullptr);
-				printf("Accept Thread End\n");
+				::PostQueuedCompletionStatus(this->_IOCP, byteTransfered, completionKey, nullptr);
+				::printf("Accept Thread End\n");
 				return false;
 			}
-			wsprintf(errStr, L"TryAccept::WSAGetLastError return value is %u", err);
-			DispatchError(dfNCWORKER_WSASEND_SOCKET_ERROR_WAS_NOT_WSA_IO_PENDING, err, errStr);
+			::wsprintf(errStr, L"TryAccept::WSAGetLastError return value is %u", err);
 			this->DispatchError(dfNCACCEPT_CLIENT_SOCKET_IS_INVALID_SOCKET, err, errStr);
 		}
 		clientSocket = sock;
-		if (_SessionIdx.size() == 0)
+		if (this->_SessionIdx.size() == 0)
 		{
-			closesocket(sock);
-			DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"RunOutOf Session IDX");
+			::closesocket(sock);
+			this->DispatchError(dfNCACCEPT_SESSION_COUNTS_OVER, 0, L"RunOutOf Session IDX");
 			clientSocket = INVALID_SOCKET;
 		}
-
 		return true;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -647,7 +683,7 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// if this function returns false there's no data in packet
 	BOOL CNetServer::TryGetCompletedPacket(Session* session, Packet* packet, NetServerHeader& header)
-	{
+	{	
 		if (session->_RingBuffer.GetUseSize() < NET_HEADER_SIZE) return false;
 
 		//헤더하나 만든뒤 피크해서 5바이트가 제대로 피크됬는지 확인
@@ -655,15 +691,13 @@ namespace univ_dev
 		int pkRet1 = session->_RingBuffer.Peek((char*)&header, NET_HEADER_SIZE);
 		if (pkRet1 != NET_HEADER_SIZE)
 		{
-			wsprintf(errStr, L"TryGetCompletedPacket::RB first Peek return value is NET_HEADER_SIZE sessionID is %llu",session->_SessionID);
+			::wsprintf(errStr, L"TryGetCompletedPacket::RB first Peek return value is NET_HEADER_SIZE sessionID is %llu", session->_SessionID);
 			this->DispatchError(dfNCWORKER_USE_SIZE_OVER_HEADER_SIZE_AND_FIRST_PEEK_ZERO, 0, errStr);
 			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
 		if (header._ByteCode != 0x77)
 		{
-			wsprintf(errStr, L"TryGetCompletedPacket::byte code not 0x77 bc : %u sessionid : %I64u", header._ByteCode, session->_SessionID);
-			this->DispatchError(12345678, 10203040, errStr);
 			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
@@ -673,7 +707,7 @@ namespace univ_dev
 			if (header._Len > 10000)
 			{
 				this->DispatchError(dfNCWORKER_HEADER_LEN_OVER_RINGBUFFER_SIZE, header._Len, L"TryGetCompletedPacket::Header_Len Over RingBufferSize");
-				DisconnectSession(session->_SessionID);
+				this->DisconnectSession(session->_SessionID);
 			}
 			return false;
 		}
@@ -684,7 +718,7 @@ namespace univ_dev
 		int pkRet2 = session->_RingBuffer.Peek((char*)packet->GetWritePtr(), header._Len);
 		if (pkRet2 != header._Len)
 		{
-			wsprintf(errStr, L"TryGetCompletedPacket::RB second Peek return value is header._Len sessionID is %llu", session->_SessionID);
+			::wsprintf(errStr, L"TryGetCompletedPacket::RB second Peek return value is header._Len sessionID is %llu", session->_SessionID);
 			this->DispatchError(dfNCWORKER_USE_SIZE_OVER_PAYLOAD_SIZE_AND_SECOND_PEEK_ZERO, 0, errStr);
 			this->DisconnectSession(session->_SessionID);
 			return false;
@@ -717,16 +751,16 @@ namespace univ_dev
 	// SendProc
 	void CNetServer::SendProc(Session* session, DWORD byteTransfered)
 	{
-		InterlockedAdd64(&this->_TotalProcessedBytes, byteTransfered);
+		InterlockedAdd64((LONG64*)&this->_TotalProcessedBytes, byteTransfered + 20);
 		DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{
+			InterlockedIncrement(&this->_TotalSendPacketCount);
 			packet = session->_SendPacketBuffer[i];
 			Packet::Free(packet);
 		}
-		session->lastSendProcTime = timeGetTime();
-		OnSend(session->_SessionID);
+		this->OnSend(session->_SessionID);
 		InterlockedExchange(&session->_IOFlag, false);
 		if (session->_SendPacketQueue.size() > 0)
 		{
@@ -745,13 +779,11 @@ namespace univ_dev
 	{
 		//완료된 사이즈만큼 writePointer를 증가시킨다.
 		session->_RingBuffer.MoveWritePtr(byteTransfered);
-		SetSessionTimer(session);
-		session->lastRecvProcTime = timeGetTime();
+		this->SetSessionTimer(session);
 		//링버퍼에 있는거 하나하나 전부다 직렬화 버퍼로 가져올거임.
-		for(;;)
+		for (;;)
 		{
-			InterlockedIncrement(&this->_TotalPacket);
-			InterlockedIncrement(&this->_RecvPacketPerSec);
+			::InterlockedIncrement(&this->_TotalRecvPacketCount);
 			Packet* recvPacket = Packet::Alloc();
 			recvPacket->AddRef();
 			NetServerHeader header;
@@ -772,27 +804,14 @@ namespace univ_dev
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
-	// helper function 아이피를 가지고 wide string함
-	void CNetServer::GetStringIP(WCHAR* str, DWORD bufferLen, sockaddr_in& addr)
-	{
-		wsprintf(str, L"%d.%d.%d.%d", addr.sin_addr.S_un.S_un_b.s_b1, addr.sin_addr.S_un.S_un_b.s_b2, addr.sin_addr.S_un.S_un_b.s_b3, addr.sin_addr.S_un.S_un_b.s_b4);
-	}
-	//---------------------------------------------------------------------------------------------------------------------------------
-	//---------------------------------------------------------------------------------------------------------------------------------
-
-
-
-	//---------------------------------------------------------------------------------------------------------------------------------
-	//---------------------------------------------------------------------------------------------------------------------------------
 	// Accept Thread
 	// param : this
 	unsigned int CNetServer::CNetServerAcceptThread(void* param)
 	{
-		WCHAR errStr[512];
 		ULONGLONG sessionID = 0;
 		SOCKET client_sock;
 		sockaddr_in clientaddr;
-		for(;;)
+		for (;;)
 		{
 			client_sock = INVALID_SOCKET;
 
@@ -804,15 +823,13 @@ namespace univ_dev
 			this->GetStringIP(ipStr, 20, clientaddr);
 			if (!this->OnConnectionRequest(ipStr, ntohl(clientaddr.sin_addr.S_un.S_addr), ntohs(clientaddr.sin_port)))
 			{
-				closesocket(client_sock);
+				::closesocket(client_sock);
 				continue;
 			}
 			Session* newSession = this->CreateSession(client_sock, clientaddr, ++sessionID);
 			if (newSession == nullptr)
 			{
-				wsprintf(errStr, L"new session is nullptr more idx need");
-				this->DispatchError(dfNCACCEPT_RUN_OUT_OF_SESSION_IDX, 0, errStr);
-				closesocket(client_sock);
+				::closesocket(client_sock);
 				continue;
 			}
 			this->OnClientJoin(newSession->_SessionIPStr, newSession->_SessionIP, newSession->_SessionPort, newSession->_SessionID);
@@ -821,38 +838,114 @@ namespace univ_dev
 			if (InterlockedDecrement(&newSession->_IOCounts) == 0)
 				this->ReleaseSession(newSession);
 
-			InterlockedIncrement(&_TotalAcceptSession);
-			InterlockedIncrement(&_AcceptPerSec);
+			InterlockedIncrement(&this->_TotalAcceptSessionCount);
 		}
 		return -1;
 	}
 
-	//---------------------------------------------------------------------------------------------------------------------------------
-	//---------------------------------------------------------------------------------------------------------------------------------
-	// TimeOut Thread
-	// param : this
 	unsigned int CNetServer::CNetServerTimeOutThread(void* param)
 	{
-		WCHAR errStr[512];
 		while (!this->_ShutDownFlag)
 		{
-			Sleep(1300);
-			this->_ServerTime = timeGetTime();
+			::Sleep(1300);
+			this->_ServerTime = ::timeGetTime();
 			//지금 시간 - 얘가 쫒겨나가는 시간
 			//얘가 쫒겨나가는 시간 - 지금 시간
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
 				ULONGLONG sessionID = this->_SessionArr[i]._SessionID;
-				if ((InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
-				if ((InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
-				if (InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0) >= this->_ServerTime) continue;
+				if ((this->_SessionArr[i]._IOCounts & 0x80000000) != 0) continue;
+				if (((this->_SessionArr[i]._Sock & 0x80000000) != 0)) continue;
+				if (this->_SessionArr[i]._TimeOutTimer >= this->_ServerTime) continue;
 				if (sessionID != _SessionArr[i]._SessionID) continue;
-				this->_SessionArr[i].timeOutTime = this->_ServerTime;
 				this->OnTimeOut(this->_SessionArr[i]._SessionID);
 			}
 		}
 		return 0;
 	}
+	unsigned int CNetServer::CNetServerMoniteringThread(void* param)
+	{
+		while (this->GetNetCoreInitializeFlag())
+		{
+			::Sleep(999);
+			if (this->_MoniteringFlag == true)
+			{
+				if (this->_MoniteringSession._Sock == INVALID_SOCKET)
+					this->ConnectMoniteringSession();
+				this->RecvFromMoniteringSession();
+			}
+			::SetEvent(this->_MoniteringEvent);
+		}
+		return 0;
+	}
+	void CNetServer::ConnectMoniteringSession()
+	{
+		if (this->_MoniteringSession._Sock != INVALID_SOCKET)
+			::closesocket(this->_MoniteringSession._Sock);
+		this->_MoniteringSession._Sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (this->_MoniteringSession._Sock == INVALID_SOCKET)
+		{
+			CRASH();
+			return;
+		}
+		sockaddr_in addr;
+		addr.sin_family = AF_INET;
+		addr.sin_port = ::htons(this->_MoniteringSession._SessionPort);
+		char ip[20]{ 0 };
+
+		size_t size;
+		::wcstombs_s(&size, ip, this->_MoniteringSession._SessionIPStr, 20);
+		::inet_pton(AF_INET, ip, &addr.sin_addr);
+
+		int conRet = ::connect(this->_MoniteringSession._Sock, (sockaddr*)&addr, sizeof(addr));
+
+		u_long nonblockMode = 1;
+		::ioctlsocket(this->_MoniteringSession._Sock, FIONBIO, &nonblockMode);
+
+		LINGER l;
+		l.l_onoff = 1;
+		l.l_linger = 0;
+		::setsockopt(this->_MoniteringSession._Sock, SOL_SOCKET, SO_LINGER, (const char*)&l, sizeof(l));
+
+		BOOL keppAliveFlag = 0;
+		::setsockopt(this->_MoniteringSession._Sock, SOL_SOCKET, SO_KEEPALIVE, (const char*)&keppAliveFlag, sizeof(BOOL));
+	}
+	void CNetServer::RecvFromMoniteringSession()
+	{
+		char recvBuffer[1024];
+		int recvRet = ::recv(this->_MoniteringSession._Sock, recvBuffer, 1024, 0);
+		if (recvRet == SOCKET_ERROR)
+		{
+			int err = ::WSAGetLastError();
+			if (err != WSAEWOULDBLOCK)
+			{
+				if (this->_MoniteringSession._Sock != INVALID_SOCKET)
+					::closesocket(this->_MoniteringSession._Sock);
+				this->_MoniteringSession._Sock = INVALID_SOCKET;
+			}
+		}
+		else if (recvRet == 0)
+		{
+			if (this->_MoniteringSession._Sock != INVALID_SOCKET)
+				::closesocket(this->_MoniteringSession._Sock);
+			this->_MoniteringSession._Sock = INVALID_SOCKET;
+		}
+	}
+
+	void CNetServer::SendToMoniteringSession(Packet* packet)
+	{
+		packet->AddRef();
+		packet->SetNetHeader();
+		int sendRet = ::send(this->_MoniteringSession._Sock, (char*)packet->GetReadPtr(), packet->GetBufferSize(), 0);
+		if (sendRet == SOCKET_ERROR)
+		{
+			int err = ::WSAGetLastError();
+			if (err != WSAEWOULDBLOCK)
+				this->DispatchError(0, 0, L"SendToMoniteringSession -> err");
+		}
+		Packet::Free(packet);
+	}
+
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -871,8 +964,6 @@ namespace univ_dev
 		ULONGLONG sessionID = 0;
 		Session* session = nullptr;
 		int GQCSRet = 0;
-
-		WCHAR errStr[512];
 		for(;;)
 		{
 			byteTransfered = 0;
@@ -887,7 +978,7 @@ namespace univ_dev
 			{
 				if (completionKey == 0xffffffff)
 				{
-					printf("ThreadID : %d\nCompletionKey : %llu     Thread End\n", thisThreadID, (ULONGLONG)completionKey);
+					printf("ThreadID : %d\nCompletionKey : %llu     Thread End\n", thisThreadID, completionKey);
 					ULONG_PTR completionKey = (ULONG_PTR)0xffffffff;
 					DWORD byteTransfered = 0;
 					PostQueuedCompletionStatus(this->_IOCP, byteTransfered, completionKey, nullptr);
@@ -896,12 +987,11 @@ namespace univ_dev
 				else if (completionKey == 0)
 				{
 					int err = WSAGetLastError();
-					wsprintf(errStr, L"GetQueuedCompletionStatus Overlapped is nullptr");
-					this->DispatchError(dfNCWORKER_OVERLAPPED_IS_NULL, err, errStr);
+					this->DispatchError(dfNCWORKER_OVERLAPPED_IS_NULL, err, L"GQCS returned and overlapped is nullptr");
 					continue;
 				}
 			}
-			else if (over == (OVERLAPPED*)0xffffffff)
+			else if (over == (LPOVERLAPPED)0xffffffff)
 			{
 				this->OnClientLeave(completionKey);
 				continue;
@@ -909,7 +999,7 @@ namespace univ_dev
 			sessionID = (ULONGLONG)completionKey;
 			job = (OverlappedEx*)over;
 
-			session = FindSession(sessionID);
+			session = this->FindSession(sessionID);
 			//recv 완료처리라면
 			if (GQCSRet != 0 && byteTransfered != 0)
 			{
@@ -934,15 +1024,15 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// Net Core Cleanup
-	void CNetServer::CNetServerCleanup()
+	void CNetServer::Cleanup()
 	{
 		//정리 작업
-		CloseHandle(this->_IOCP);
-		CloseHandle(this->_RunningEvent);
-		DeleteCriticalSection(&this->_SessionMapLock);
-		delete[] this->_WorkerThreads;
-		InterlockedExchange(&this->_ServerOnFlag, false);
-		WSACleanup();
+		::CloseHandle(this->_IOCP);
+		::CloseHandle(this->_RunningEvent);
+		::DeleteCriticalSection(&this->_SessionMapLock);
+		::delete[] this->_WorkerThreads;
+		::InterlockedExchange(&this->_ServerOnFlag, false);
+		::WSACleanup();
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -950,18 +1040,17 @@ namespace univ_dev
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
-	// 세션 찾기
+	// 세션 찾기 안쓰는 함수
 	Session* CNetServer::FindAndLockSession(ULONGLONG sessionID)
 	{
-		return &this->_SessionArr[sessionID & 0xffff];
+		if ((sessionID & 0xffff) >= this->_MaxSessionCounts)
+			CRASH();
+		return &_SessionArr[sessionID & 0xffff];
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 
 	//---------------------------------------------------------------------------------------------------------------------------------
-	Session* CNetServer::FindSession(ULONGLONG sessionID)
-	{
-		return &this->_SessionArr[sessionID & 0xffff];
-	}
+
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -969,7 +1058,7 @@ namespace univ_dev
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
-	// 동기화 함수
+	// 동기화 함수 안쓰는함수
 	void CNetServer::SessionMapLock()
 	{
 		EnterCriticalSection(&_SessionMapLock);
@@ -995,7 +1084,6 @@ namespace univ_dev
 				this->ReleaseSession(session);
 			return nullptr;
 		}
-		
 		if (session->_SessionID != sessionID)
 		{
 			if (InterlockedDecrement(&session->_IOCounts) == 0)
@@ -1010,10 +1098,6 @@ namespace univ_dev
 		if (InterlockedDecrement(&session->_IOCounts) == 0)
 			this->ReleaseSession(session);
 	}
-	void CNetServer::SetSessionTimer(Session* session)
-	{
-		InterlockedExchange(&session->_TimeOutTimer, timeGetTime() + _TimeOutClock);
-	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
@@ -1027,10 +1111,8 @@ namespace univ_dev
 		if (!this->PopSessionIndex(idx)) return nullptr;
 		Session* newSession = &this->_SessionArr[idx];
 
-		newSession->acceptTime = timeGetTime();
-
-		newSession->_SessionIP = ntohl(clientaddr.sin_addr.S_un.S_addr);
-		newSession->_SessionPort = ntohs(clientaddr.sin_port);
+		newSession->_SessionIP = ::ntohl(clientaddr.sin_addr.S_un.S_addr);
+		newSession->_SessionPort = ::ntohs(clientaddr.sin_port);
 		ZeroMemory(newSession->_SessionIPStr, sizeof(newSession->_SessionIPStr));
 		this->GetStringIP(newSession->_SessionIPStr, 20, clientaddr);
 
@@ -1039,12 +1121,12 @@ namespace univ_dev
 		newSession->_RingBuffer.ClearBuffer();
 		newSession->_SessionID = (sessionID << 16) | idx;
 		this->SetSessionTimer(newSession);
-		InterlockedIncrement(&newSession->_IOCounts);
-		InterlockedExchange(&newSession->_IOFlag, false);
-		InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
-		InterlockedExchange(&newSession->_Sock, sock);
-		CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
-		InterlockedIncrement(&this->_CurSessionCount);
+		::InterlockedIncrement(&newSession->_IOCounts);
+		::InterlockedExchange(&newSession->_IOFlag, false);
+		::InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
+		::InterlockedExchange(&newSession->_Sock, sock);
+		::CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
+		::InterlockedIncrement(&this->_CurSessionCount);
 		return newSession;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1053,51 +1135,34 @@ namespace univ_dev
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
-	bool CNetServer::PopSessionIndex(DWORD& ret)
+
+	void CNetServer::GetMoniteringInfo(MoniteringInfo& ret)
 	{
-		return _SessionIdx.pop(ret);
-	}
-	//---------------------------------------------------------------------------------------------------------------------------------
-	void CNetServer::PushSessionIndex(DWORD idx)
-	{
-		return _SessionIdx.push(idx);
-	}
-	void CNetServer::PostNetServerStop()
-	{
-		this->_ShutDownFlag = true;
-		closesocket(this->_ListenSocket);
-	}
-	CNetServer::MoniteringInfo CNetServer::GetMoniteringInfo()
-	{
-		MoniteringInfo ret;
 		ret._WorkerThreadCount = _ThreadPoolSize;
 		ret._RunningThreadCount = _RunningThreadCount;
-		ret._AccpeptCount = InterlockedExchange(&_AcceptPerSec, 0);
-		ret._RecvPacketCount = InterlockedExchange(&_RecvPacketPerSec, 0);
-		ret._SendPacketCount = InterlockedExchange(&_SendPacketPerSec, 0);
-		ret._TotalAcceptSession = _TotalAcceptSession;
-		ret._TotalPacket = _TotalPacket;
-		ret._TotalProecessedBytes = _TotalProcessedBytes;
-		ret._TotalReleaseSession = _TotalReleasedSession;
-		ret._SessionCnt = _CurSessionCount;
-		ret._LockFreeStackCapacity = _SessionIdx.GetCapacityCount();
-		ret._LockFreeStackSize = _SessionIdx.GetUseCount();
-		ret._LockFreeQueueSize = 0;
-		ret._LockFreeQueueCapacity = 0;
-		ret._LockFreeMaxCapacity = 0;
+		ret._TotalAcceptSessionCount = this->_TotalAcceptSessionCount;
+		ret._TotalReleaseSessionCount = this->_TotalReleaseSessionCount;
+		ret._TotalRecvPacketCount = this->_TotalRecvPacketCount;
+		ret._TotalSendPacketCount = this->_TotalSendPacketCount;
+		ret._CurrentSessionCount = this->_CurSessionCount;
+		ret._TotalProcessedBytes = this->_TotalProcessedBytes;
+		ret._CurrentSessionCount = this->_CurSessionCount;
+		ret._SessionIndexStackCapacity = this->_SessionIdx.GetCapacityCount();
+		ret._SessionIndexStackSize = this->_SessionIdx.GetUseCount();
+		ret._SessionSendQueueSize = 0;
+		ret._SessionSendQueueCapacity = 0;
+		ret._SessionSendQueueMax = 0;
 		for (int i = 0; i < _MaxSessionCounts; i++)
-			ret._LockFreeQueueSize += _SessionArr[i]._SendPacketQueue.size();
+			ret._SessionSendQueueSize += this->_SessionArr[i]._SendPacketQueue.size();
 		for (int i = 0; i < _MaxSessionCounts; i++)
 		{
-			if (_SessionArr[i]._SendPacketQueue.GetCapacityCount() > ret._LockFreeMaxCapacity)
-				ret._LockFreeMaxCapacity = _SessionArr[i]._SendPacketQueue.GetCapacityCount();
-			ret._LockFreeQueueCapacity += _SessionArr[i]._SendPacketQueue.GetCapacityCount();
+			if (this->_SessionArr[i]._SendPacketQueue.GetCapacityCount() > ret._SessionSendQueueMax)
+				ret._SessionSendQueueMax = this->_SessionArr[i]._SendPacketQueue.GetCapacityCount();
+			ret._SessionSendQueueCapacity += this->_SessionArr[i]._SendPacketQueue.GetCapacityCount();
 		}
-		return ret;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
-
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1105,15 +1170,16 @@ namespace univ_dev
 	void CNetServer::ReleaseSession(Session* session)
 	{
 		ULONGLONG sessionID = session->_SessionID;
-		if (InterlockedCompareExchange(&session->_IOCounts, 0x80000000, 0) != 0)
+		if (::InterlockedCompareExchange(&session->_IOCounts, 0x80000000, 0) != 0)
 			return;
 		if (session->_SessionID != sessionID)
 			return;
 
 		DWORD idx = sessionID & 0xffff;
-		closesocket(session->_Sock & 0x7fffffff);
+		::closesocket(session->_Sock & 0x7fffffff);
 
-		DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
+		DWORD sendCount = session->_SendBufferCount;
+		session->_SendBufferCount = 0;
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{
@@ -1122,19 +1188,11 @@ namespace univ_dev
 		}
 		while (session->_SendPacketQueue.dequeue(packet))
 			Packet::Free(packet);
-		session->acceptTime = timeGetTime();
-		session->lastRecvProcTime = 0;
-		session->lastRecvPostTime = 0;
-		session->lastSendProcTime = 0;
-		session->lastSendPostTime = 0;
-		session->timeOutTime = 0;
-		InterlockedExchange(&session->_IOFlag, false);
+		::InterlockedExchange(&session->_IOFlag, false);
 		this->PostOnClientLeave(sessionID);
 		this->PushSessionIndex(idx);
-		InterlockedDecrement(&_CurSessionCount);
-		InterlockedIncrement(&_TotalReleasedSession);
-		
-		return;
+		::InterlockedDecrement(&this->_CurSessionCount);
+		::InterlockedIncrement(&this->_TotalReleaseSessionCount);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1147,16 +1205,14 @@ namespace univ_dev
 	{
 		Session* disconnectSession = this->AcquireSession(sessionID);
 		if (disconnectSession == nullptr) return;
-		
-		SOCKET sock = (SOCKET)InterlockedOr64((LONG64*)&disconnectSession->_Sock, 0x80000000);
+		SOCKET sock = InterlockedOr((LONG*)&disconnectSession->_Sock, 0x80000000);
 		if ((sock & 0x80000000) != 0)
 		{
-			DispatchError(12345, 12345, L"sock bit Already 0x80000000 setted");
-			ReturnSession(disconnectSession);
+			this->ReturnSession(disconnectSession);
 			return;
 		}
-		CancelIoEx((HANDLE)sock, nullptr);
-		ReturnSession(disconnectSession);
+		CancelIoEx((HANDLE)(sock & 0x7fffffff), nullptr);
+		this->ReturnSession(disconnectSession);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1167,15 +1223,14 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 	// 생성자 소멸자
-	CNetServer::CNetServer(USHORT port, DWORD backlogQueueSize, DWORD threadPoolSize, DWORD runningThread, DWORD nagleOff, ULONGLONG maxSessionCounts, DWORD timeOutTime)
-		: _ServerPort{ port }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _RecvPacketPerSec{ 0 }, _TotalPacket{ 0 }, _ListenSocket{ 0 }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ threadPoolSize }, _RunningThreadCount{ runningThread }, _RunningEvent{ nullptr }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _TotalReleasedSession{ 0 }, _NagleOff{ nagleOff }, _MaxSessionCounts{ maxSessionCounts }, _AcceptPerSec{ 0 }, _SessionArr{ nullptr }, _TimeOutClock(timeOutTime) ,_ServerTime(timeGetTime())
+	CNetServer::CNetServer()
+		: _ServerPort{ 0 }, _ShutDownFlag{ false }, _APIErrorCode{ 0 }, _ErrorCode{ 0 }, _IOCP{ nullptr }, _AcceptThread{ nullptr }, _ListenSocket{ 0 }, _WorkerThreads{ nullptr }, _ThreadPoolSize{ 0 }, _RunningThreadCount{ 0 }, _RunningEvent{ nullptr }, _TotalProcessedBytes{ 0 }, _SessionMapLock{ 0 }, _NagleOff{ 0 }, _MaxSessionCounts{ 0 }, _SessionArr{ nullptr }, _TimeOutClock{ 0 }
 	{
-		this->CNetServerStartup();
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	CNetServer::~CNetServer()
 	{
-		this->CNetServerCleanup();
+		this->Cleanup();
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
