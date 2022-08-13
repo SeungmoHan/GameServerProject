@@ -957,9 +957,12 @@ namespace univ_dev
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
 				ULONGLONG sessionID = this->_SessionArr[i]._SessionID;
-				if ((::InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
-				if ((::InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
-				if (::InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0) >= this->_ServerTime) continue;
+				//if ((::InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
+				//if ((::InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
+				//if (::InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0) >= this->_ServerTime) continue;
+				if (this->_SessionArr[i]._IOCounts & 0x80000000 != 0) continue;
+				if (this->_SessionArr[i]._Sock & 0x80000000 != 0) continue;
+				if (this->_SessionArr[i]._TimeOutTimer >= this->_ServerTime) continue;
 				if (sessionID != _SessionArr[i]._SessionID) continue;
 				this->OnTimeOut(this->_SessionArr[i]._SessionID);
 			}
@@ -1251,9 +1254,12 @@ namespace univ_dev
 		this->SetSessionTimer(newSession);
 		::InterlockedIncrement(&newSession->_IOCounts);
 		::InterlockedExchange(&newSession->_IOFlag, false);
-		::InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
-		::InterlockedExchange(&newSession->_Sock, sock);
-		::InterlockedExchange(&newSession->_Available, true);
+		//::InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
+		//::InterlockedExchange(&newSession->_Sock, sock);
+		//::InterlockedExchange(&newSession->_Available, true);
+		newSession->_IOCounts &= 0x7fffffff;
+		newSession->_Sock = sock;
+		newSession->_Available = true;
 		::CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
 		::InterlockedIncrement(&this->_CurSessionCount);
 		return newSession;
@@ -1301,20 +1307,22 @@ namespace univ_dev
 			return;
 		if (session->_SessionID != sessionID)
 			return;
-		::InterlockedExchange(&session->_Available, false);
+		//::InterlockedExchange(&session->_Available, false);
+		session->_Available = false;
 
 		DWORD idx = sessionID & 0xffff;
 		::closesocket(session->_Sock & 0x7fffffff);
 
-		DWORD sendCount = ::InterlockedExchange(&session->_SendBufferCount, 0);
+		DWORD sendCount = session->_SendBufferCount;
+		session->_SendBufferCount = 0;
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{
 			packet = session->_SendPacketBuffer[i];
 			Packet::Free(packet);
 		}
-		//while (session->_SendPacketQueue.dequeue(packet))
-		//	Packet::Free(packet);
+		while (session->_SendPacketQueue.dequeue(packet))
+			Packet::Free(packet);
 		::InterlockedExchange(&session->_IOFlag, false);
 		this->PostOnClientLeave(sessionID);
 		this->PushSessionIndex(idx);

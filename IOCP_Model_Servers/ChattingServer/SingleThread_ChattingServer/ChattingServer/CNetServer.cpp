@@ -120,14 +120,13 @@ namespace univ_dev
 		::ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 
 		::InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = ::InterlockedOr64((LONG64*)&session->_Sock, 0);
-		recvRet = ::WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
+		//SOCKET sock = ::InterlockedOr64((LONG64*)&session->_Sock, 0);
+		recvRet = ::WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
 			int err = ::WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				::CancelIoEx((HANDLE)session->_Sock, nullptr);
 				if (err != 10053 && err != 10054 && err != 10064 && err != 10038)
 				{
 					WCHAR errorStr[512] = { L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING" };
@@ -173,17 +172,17 @@ namespace univ_dev
 			sendWSABuf[i].len = packet->GetBufferSize();
 		}
 
-		::InterlockedExchange(&session->_SendBufferCount, cnt);
+		session->_SendBufferCount = cnt;
+		//::InterlockedExchange(&session->_SendBufferCount, cnt);
 		::InterlockedIncrement(&session->_IOCounts);
 
-		SOCKET sock = ::InterlockedOr64((LONG64*)&session->_Sock, 0);
-		sendRet = ::WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
+		//SOCKET sock = ::InterlockedOr64((LONG64*)&session->_Sock, 0);
+		sendRet = ::WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = ::WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				::CancelIoEx((HANDLE)session->_Sock, nullptr);
 				if (err != 10053 && err != 10054 && err != 10064 && err != 10038)
 				{
 					WCHAR errStr[512];
@@ -225,7 +224,7 @@ namespace univ_dev
 			Packet::Free(packet);
 			return;
 		}
-		if (!InterlockedOr((LONG*)&session->_Available,0))
+		if (!session->_Available)
 		{
 			Packet::Free(packet);
 			return;
@@ -759,9 +758,9 @@ namespace univ_dev
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
 				ULONGLONG sessionID = this->_SessionArr[i]._SessionID;
-				if ((::InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
-				if ((::InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
-				if (::InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0) >= this->_ServerTime) continue;
+				if ((this->_SessionArr[i]._IOCounts & 0x80000000) != 0) continue;
+				if ((this->_SessionArr[i]._Sock & 0x80000000) != 0) continue;
+				if (this->_SessionArr[i]._TimeOutTimer >= this->_ServerTime) continue;
 				if (sessionID != _SessionArr[i]._SessionID) continue;
 				this->OnTimeOut(this->_SessionArr[i]._SessionID);
 			}
@@ -1050,9 +1049,12 @@ namespace univ_dev
 		this->SetSessionTimer(newSession);
 		::InterlockedIncrement(&newSession->_IOCounts);
 		::InterlockedExchange(&newSession->_IOFlag, false);
-		::InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
-		::InterlockedExchange(&newSession->_Sock, sock);
-		::InterlockedExchange(&newSession->_Available, true);
+		//::InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
+		//::InterlockedExchange(&newSession->_Available, true);
+		//::InterlockedExchange(&newSession->_Sock, sock);
+		newSession->_IOCounts &= 0x7fffffff;
+		newSession->_Sock = sock;
+		newSession->_Available = true;
 		::CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
 		::InterlockedIncrement(&this->_CurSessionCount);
 		return newSession;
@@ -1102,12 +1104,14 @@ namespace univ_dev
 			return;
 		if (session->_SessionID != sessionID)
 			return;
-		::InterlockedExchange(&session->_Available, false);
+		//::InterlockedExchange(&session->_Available, false);
+		session->_Available = false;
 
 		DWORD idx = sessionID & 0xffff;
 		::closesocket(session->_Sock & 0x7fffffff);
 
-		DWORD sendCount = ::InterlockedExchange(&session->_SendBufferCount, 0);
+		DWORD sendCount = session->_SendBufferCount;
+		session->_SendBufferCount = 0;
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{

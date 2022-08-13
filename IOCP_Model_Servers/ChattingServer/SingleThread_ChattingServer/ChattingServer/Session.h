@@ -33,7 +33,7 @@ namespace univ_dev
         alignas(64) DWORD       _ThreadBlockIdx;
 
         alignas(64)
-            OverlappedEx            _RecvJob;
+        OverlappedEx            _RecvJob;
         DWORD                   _TimeOutTimer;
         RingBuffer              _RingBuffer;
         alignas(64)
