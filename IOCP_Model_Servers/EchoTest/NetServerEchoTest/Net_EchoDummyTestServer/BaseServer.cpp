@@ -10,7 +10,7 @@
 
 namespace univ_dev
 {
-	unsigned __stdcall MoniteringThread(void* param);
+	unsigned __stdcall MonitoringThread(void* param);
 	/// ---------------------------------------------------------------------------------------
 	/// ---------------------------------------------------------------------------------------
 	/// ---------------------------------------------------------------------------------------
@@ -41,9 +41,9 @@ namespace univ_dev
 			int i = 0;
 			for(;;)
 			{
+				Profiler pro("Job Loop");
 				if (!this->_JobQueue.dequeue(job))
 					break;
-			
 				switch (job._Type)
 				{
 					case JobMessage::Type::THREAD_BLOCK_STOP:
@@ -53,24 +53,20 @@ namespace univ_dev
 						this->_BaseServer->PostServerStop();
 						break;
 					}
-					case JobMessage::Type::CLIENT_ENTER:
-					{
-						this->OnPlayerJoined(job._SessionID,job._Player);
-						break;
-					}
 					case JobMessage::Type::CLIENT_LEAVE:
 					{
 						this->OnPlayerLeaved(job._SessionID, job._Player);
 						break;
 					}
-					case JobMessage::Type::CLIENT_MOVE_ENTER:
+					case JobMessage::Type::CLIENT_ENTER:
 					{
-						this->OnPlayerMoveJoin(job._SessionID, job._Player);
+						this->OnPlayerJoined(job._SessionID,job._Player);
 						break;
 					}
-					case JobMessage::Type::CLIENT_MOVE_LEAVE:
+					case JobMessage::Type::MESSAGE:
 					{
-						this->OnPlayerMoveLeave(job._SessionID, job._Player);
+						this->OnMessage(job._SessionID, job._Packet);
+						Packet::Free(job._Packet);
 						break;
 					}
 					case JobMessage::Type::TIME_OUT:
@@ -78,10 +74,14 @@ namespace univ_dev
 						this->OnTimeOut(job._SessionID);
 						break;
 					}
-					case JobMessage::Type::MESSAGE:
+					case JobMessage::Type::CLIENT_MOVE_LEAVE:
 					{
-						this->OnMessage(job._SessionID, job._Packet);
-						Packet::Free(job._Packet);
+						this->OnPlayerMoveLeave(job._SessionID, job._Player);
+						break;
+					}
+					case JobMessage::Type::CLIENT_MOVE_ENTER:
+					{
+						this->OnPlayerMoveJoin(job._SessionID, job._Player);
 						break;
 					}
 					default:
@@ -93,6 +93,7 @@ namespace univ_dev
 						break;
 					}
 				}
+
 				if (i++ >= 100000)
 				{
 					SetEvent(this->_RunningEvent);
@@ -148,7 +149,7 @@ namespace univ_dev
 	{
 		this->Close();
 	}
-	BaseServer::BaseServer() : _RunningFlag(false), _ThreadBlockStartEvent(CreateEvent(nullptr, true, false, nullptr)),_ErrTlsIdx(-1),_MoniteringThread(nullptr)
+	BaseServer::BaseServer() : _RunningFlag(false), _ThreadBlockStartEvent(CreateEvent(nullptr, true, false, nullptr)),_ErrTlsIdx(-1),_MonitoringThread(nullptr)
 	{
 		//this->InitNetServer(port, backlogQueueSize, threadPoolSize, runningThread, nagleOff, maxSessionCounts, timeOutTime);
 	}
@@ -193,8 +194,8 @@ namespace univ_dev
 	{
 		this->_RunningFlag = true;
 
-		this->_MoniteringThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
-		if (this->_MoniteringThread == nullptr)
+		this->_MonitoringThread = (HANDLE)_beginthreadex(nullptr, 0, MonitoringThread, this, 0, nullptr);
+		if (this->_MonitoringThread == nullptr)
 		{
 			CRASH();
 			return;
@@ -205,7 +206,7 @@ namespace univ_dev
 		for (auto iter = this->_BaseServerThreadBlockMap.begin(); iter != this->_BaseServerThreadBlockMap.end(); ++iter,i++)
 			threadArr[i] = iter->second->_RunningThread;
 
-		threadArr[_BaseServerThreadBlockMap.size()] = this->_MoniteringThread;
+		threadArr[_BaseServerThreadBlockMap.size()] = this->_MonitoringThread;
 		SetEvent(this->_ThreadBlockStartEvent);
 		this->Run(threadArr, _BaseServerThreadBlockMap.size() + 1);
 	}
@@ -218,7 +219,7 @@ namespace univ_dev
 
 
 
-	unsigned int BaseServer::MoniteringThreadProc()
+	unsigned int BaseServer::MonitoringThreadProc()
 	{
 		DWORD begin = timeGetTime();
 		DWORD prev;
@@ -278,21 +279,21 @@ namespace univ_dev
 
 			prev = cur;
 
-			//printf("\n-------------------------------------MONITERING----------------------------------------\n");
-			//printf("| After Server On : %u day / %u h / %u m / %u s\n", day, hour, minute, sec);
-			//printf("|----------------------------------------THREAD----------------------------------------\n");
-			//printf("| Worker Thread / Running  thread : %u / %u\n", info._WorkerThreadCount, info._RunningThreadCount);
-			//printf("|----------------------------------------TOTAL-----------------------------------------\n");
-			//printf("| Total Accept / Release / : %llu /  %llu\n", info._TotalAcceptSessionCount, info._TotalReleaseSessionCount);
-			//printf("| Total Processed Bytes : %llu\n", info._TotalProcessedBytes);
-			//printf("|----------------------------------------TPS-------------------------------------------\n");
-			//printf("| Accept Per Sec / Release Per Sec : %llu / %llu\n", info._TotalAcceptSessionCount - lastTotalAccept, info._TotalReleaseSessionCount - lastTotalRelease);
+			printf("\n-------------------------------------MONITERING----------------------------------------\n");
+			printf("| After Server On : %u day / %u h / %u m / %u s\n", day, hour, minute, sec);
+			printf("|----------------------------------------THREAD----------------------------------------\n");
+			printf("| Worker Thread / Running  thread : %u / %u\n", info._WorkerThreadCount, info._RunningThreadCount);
+			printf("|----------------------------------------TOTAL-----------------------------------------\n");
+			printf("| Total Accept / Release / : %llu /  %llu\n", info._TotalAcceptSessionCount, info._TotalReleaseSessionCount);
+			printf("| Total Processed Bytes : %llu\n", info._TotalProcessedBytes);
+			printf("|----------------------------------------TPS-------------------------------------------\n");
+			printf("| Accept Per Sec / Release Per Sec : %llu / %llu\n", info._TotalAcceptSessionCount - lastTotalAccept, info._TotalReleaseSessionCount - lastTotalRelease);
 			printf("| TPS// Recv / Send / Total  : %llu / %llu / %llu\n", info._TotalRecvPacketCount - lastTotalRecv, info._TotalSendPacketCount - lastTotalSend, (info._TotalSendPacketCount - lastTotalSend) + (info._TotalRecvPacketCount - lastTotalRecv));
 			printf("| LockFreeQueue Size / Capacity / Max : %u / %u / %u\n", info._SessionSendQueueSize, info._SessionSendQueueCapacity, info._SessionSendQueueMax);
-			//printf("|----------------------------------------Library---------------------------------------\n");
-			//printf("| Packet Chunk Capacity / UseCount : %d / %d\n", Packet::GetCapacityCount(), Packet::GetUseCount());
-			//printf("| Packet ToTal UseCount : %d\n", Packet::GetTotalPacketCount());
-			//printf("| Session Count / IDX Capacity / IDX Size : %u / %u / %u\n", info._CurrentSessionCount, info._SessionIndexStackCapacity, info._SessionIndexStackSize);
+			printf("|----------------------------------------Library---------------------------------------\n");
+			printf("| Packet Chunk Capacity / UseCount : %d / %d\n", Packet::GetCapacityCount(), Packet::GetUseCount());
+			printf("| Packet ToTal UseCount : %d\n", Packet::GetTotalPacketCount());
+			printf("| Session Count / IDX Capacity / IDX Size : %u / %u / %u\n", info._CurrentSessionCount, info._SessionIndexStackCapacity, info._SessionIndexStackSize);
 
 			int totalJobQueueSize = 0;
 
@@ -300,7 +301,7 @@ namespace univ_dev
 			{
 				int queueSize = iter->second->_JobQueue.size();
 				totalJobQueueSize += queueSize;
-				//printf("| %s JobQueue Size : %d\n", iter->second->GetThreadBlockName().c_str(), queueSize);
+				printf("| %s JobQueue Size : %d\n", iter->second->GetThreadBlockName().c_str(), queueSize);
 			}
 
 
@@ -310,11 +311,10 @@ namespace univ_dev
 			{
 				iter->second->RunMonitering(this->_HardWareMoniter, this->_ProcessMoniter);
 			}
-			printf("Alive\n");
-			//printf("|-----------------------------------USAGE_MONITER--------------------------------------\n");
-			//printf("| NIC Send / Recv (10KB) : %.3llf / %.3llf\n", this->_HardWareMoniter.EthernetSendKBytes(), this->_HardWareMoniter.EthernetRecvKBytes());
-			//printf("| Available / NPPool / Private Mem : %lluMb / %lluMb / %lluKb\n", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryMBytes());
-			//printf("| CPU / PROCESS : [T %.2llf%% K %.2llf%% U %.2llf%%] / [T %.2llf%% K %.2llf%% U %.2llf%%]   \n", this->_HardWareMoniter.ProcessorTotal(), this->_HardWareMoniter.ProcessorKernel(), this->_HardWareMoniter.ProcessorUser(), this->_ProcessMoniter.ProcessTotal(), this->_ProcessMoniter.ProcessKernel(), this->_ProcessMoniter.ProcessUser());
+			printf("|-----------------------------------USAGE_MONITER--------------------------------------\n");
+			printf("| NIC Send / Recv (10KB) : %.3llf / %.3llf\n", this->_HardWareMoniter.EthernetSendKBytes(), this->_HardWareMoniter.EthernetRecvKBytes());
+			printf("| Available / NPPool / Private Mem : %lluMb / %lluMb / %lluKb\n", this->_HardWareMoniter.AvailableMemoryMBytes(), this->_HardWareMoniter.NonPagedPoolMBytes(), this->_ProcessMoniter.PrivateMemoryMBytes());
+			printf("| CPU / PROCESS : [T %.2llf%% K %.2llf%% U %.2llf%%] / [T %.2llf%% K %.2llf%% U %.2llf%%]   \n", this->_HardWareMoniter.ProcessorTotal(), this->_HardWareMoniter.ProcessorKernel(), this->_HardWareMoniter.ProcessorUser(), this->_ProcessMoniter.ProcessTotal(), this->_ProcessMoniter.ProcessKernel(), this->_ProcessMoniter.ProcessUser());
 
 			Packet* packet[50];
 			int packetCount = 0;
@@ -399,12 +399,12 @@ namespace univ_dev
 		}
 		return -1;
 	}
-	unsigned __stdcall MoniteringThread(void* param)
+	unsigned __stdcall MonitoringThread(void* param)
 	{
 		BaseServer* server = (BaseServer*)param;
 		if (server == nullptr)
 			CRASH();
-		return server->MoniteringThreadProc();
+		return server->MonitoringThreadProc();
 	}
 
 

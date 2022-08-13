@@ -24,9 +24,7 @@ namespace univ_dev
 
 	void GameThreadBlock::OnMessage(ULONGLONG sessionID, Packet* packet)
 	{
-		WORD type;
-		(*packet) >> type;
-		this->PacketProc(sessionID, packet, type);
+		this->PacketProc(sessionID, packet);
 	}
 
 	void GameThreadBlock::OnPlayerJoined(ULONGLONG sessionID, Player* player)
@@ -103,9 +101,9 @@ namespace univ_dev
 		int curTime = ::time(nullptr);
 
 
-		//printf("|-------------------------------------Game Block---------------------------------------\n");
-		//printf("| Total Game Frmae / FPS : %llu / %llu\n", this->_TotalGameBlockFPS, this->_TotalGameBlockFPS - this->_LastGameBlockFPS);
-		//printf("| Game Player : %llu\n", this->_PlayerMap.size());
+		printf("|-------------------------------------Game Block---------------------------------------\n");
+		printf("| Total Game Frmae / FPS : %llu / %llu\n", this->_TotalGameBlockFPS, this->_TotalGameBlockFPS - this->_LastGameBlockFPS);
+		printf("| Game Player : %llu\n", this->_PlayerMap.size());
 
 		packet[packetCount] = Packet::Alloc();
 		this->MakePacketMoniteringInfo(packet[packetCount++],
@@ -132,17 +130,19 @@ namespace univ_dev
 
 	void GameThreadBlock::OnThreadBlockStop()
 	{
-
+		
 	}
 
-	void GameThreadBlock::PacketProc(ULONGLONG sessionID, Packet* packet, WORD type)
+	void GameThreadBlock::PacketProc(ULONGLONG sessionID, Packet* packet)
 	{
+		WORD type;
+		(*packet) >> type;
 		switch (type)
 		{
 			case PACKET_TYPE::en_PACKET_CS_GAME_REQ_LOGIN:
 			{
 				WCHAR* errStr = this->_GameServer->GetErrString();
-				wsprintf(errStr, L"Packet ECHO Type in Login Block SessionID : %I64u", sessionID);
+				wsprintf(errStr, L"Packet Login Type in Game Block SessionID : %I64u", sessionID);
 				this->_GameBlockLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
 				break;
 			}
@@ -158,6 +158,9 @@ namespace univ_dev
 			}
 			default:
 			{
+				WCHAR* errStr = this->_GameServer->GetErrString();
+				wsprintf(errStr, L"GameBlock::PacketProc default SessionID : %I64u ,type : %u", sessionID, type);
+				this->_GameBlockLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
 				this->Disconnect(sessionID);
 				break;
 			}
@@ -166,39 +169,36 @@ namespace univ_dev
 
 	void GameThreadBlock::PacketProcEchoRequest(ULONGLONG sessionID, Packet* packet)
 	{
-		auto iter = this->_PlayerMap.find(sessionID);
-		if (iter == this->_PlayerMap.end())
-		{
-			this->Disconnect(sessionID);
-			return;
-		}
-		Player* player = iter->second;
-		if (player->_Logined == false)
-		{
-			this->Disconnect(sessionID);
-			return;
-		}
-
-		//INT64 acc_tick[2];
+		//auto iter = this->_PlayerMap.find(sessionID);
+		//if (iter == this->_PlayerMap.end())
+		//{
+		//	this->_GameBlockLog.LOG(L"GameBlock::PlayerMap.end()", LogClass::LogLevel::LOG_LEVEL_ERROR);
+		//	this->Disconnect(sessionID);
+		//	return;
+		//}
+		//Player* player = iter->second;
+		//if (player->_Logined == false)
+		//{
+		//	this->_GameBlockLog.LOG(L"GameBlock::player logined", LogClass::LogLevel::LOG_LEVEL_ERROR);
+		//	this->Disconnect(sessionID);
+		//	return;
+		//}
 		INT64 accountNo;
 		LONGLONG sendTick;
 
-		//packet->GetBuffer((char*)acc_tick, sizeof(acc_tick));
-		//(*packet) >> acc_tick[0] >> acc_tick[1];
 		(*packet) >> accountNo >> sendTick;
 
 
 		Packet* sendPacket = Packet::Alloc();
 		this->MakePacketEchoResponse(sendPacket, accountNo, sendTick);
-		//this->MakePacketEchoResponse(sendPacket, acc_tick[0], acc_tick[1]);
-
 		this->SendPacket(sessionID, sendPacket);
 	}
 
+#define ECHO_TYPE_DECLAIR(name) WORD name = PACKET_TYPE::en_PACKET_CS_GAME_RES_ECHO
 	void GameThreadBlock::MakePacketEchoResponse(Packet* packet, INT64 accounNo, LONGLONG sendTick)
 	{
-		WORD type = PACKET_TYPE::en_PACKET_CS_GAME_RES_ECHO;
-		(*packet) << type << accounNo << sendTick;
+		ECHO_TYPE_DECLAIR(ECHO_TYPE);
+		(*packet) << ECHO_TYPE << accounNo << sendTick;
 	}
 
 	/// Game Thread Block Defines End

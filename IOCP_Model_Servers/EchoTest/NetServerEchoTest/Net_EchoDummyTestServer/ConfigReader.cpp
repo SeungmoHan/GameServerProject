@@ -10,7 +10,7 @@ namespace univ_dev
 	ConfigReader::ConfigReader() : _File(nullptr), _Cursor(nullptr) {};
 	bool ConfigReader::init(const WCHAR* filename)
 	{
-		WCHAR line[256];
+		WCHAR line[512];
 
 
 		while (this->_File == nullptr)
@@ -18,19 +18,22 @@ namespace univ_dev
 
 		while (!feof(this->_File))
 		{
-			fgetws(line, 256, this->_File);
-
-			for (WCHAR* curPos = line; *curPos; curPos++)
+			fgetws(line, 512, this->_File);
+			
+			WCHAR* curPos = line;
+			while (*curPos)
 			{
 				if (*curPos == this->SECTION_FLAG)
 				{
 					this->ReadSection(curPos + 1);
+					curPos++;
 				}
-				else if (*curPos == '\t' || *curPos == ' ')
+				else if (*curPos == L'\t' || *curPos == L' ')
 				{
+					curPos++;
 					continue;
 				}
-				else if (*curPos == '\\' && *(curPos + 1) == '\\')
+				else if (*curPos == L'\\' && *(curPos + 1) == L'\\')
 				{
 					break;
 				}
@@ -53,9 +56,9 @@ namespace univ_dev
 		curPos = sectionStart;
 		while (*curPos)
 		{
-			if (*curPos == ' ' || *curPos == '\t' || *curPos == '\n')
+			if (*curPos == L' ' || *curPos == L'\t' || *curPos == L'\n')
 			{
-				*curPos = '\0';
+				*curPos = L'\0';
 				break;
 			}
 			curPos++;
@@ -78,7 +81,7 @@ namespace univ_dev
 
 			while (*curPos)
 			{
-				if (*curPos == ' ' || *curPos == '\t')
+				if (*curPos == L' ' || *curPos == L'\t')
 				{
 					curPos++;
 					continue;
@@ -91,19 +94,19 @@ namespace univ_dev
 
 			while (*curPos)
 			{
-				if (*curPos == '=')
+				if (*curPos == L'=')
 				{
-					*curPos = '\0';
+					*curPos = L'\0';
 					valueString = curPos + 1;
 					break;
 				}
-				else if (*curPos == ' ' || *curPos == '\t')
+				else if (*curPos == L' ' || *curPos == L'\t')
 				{
-					*curPos = '\0';
+					*curPos = L'\0';
 				}
-				else if (*curPos == '/')
+				else if (*curPos == L'/')
 				{
-					if (*(curPos + 1) == '/')
+					if (*(curPos + 1) == L'/')
 					{
 						valueString = nullptr;
 						break;
@@ -112,14 +115,13 @@ namespace univ_dev
 				curPos++;
 			}
 
-
 			if (valueString != nullptr)
 			{
 				while (*valueString)
 				{
-					if (*valueString == ' ' || *valueString == '\t' || *valueString == '/')
+					if (*valueString == L' ' || *valueString == L'\t' || *valueString == L'/')
 					{
-						*valueString = '\0';
+						*valueString = L'\0';
 						valueString++;
 						continue;
 					}
@@ -129,27 +131,24 @@ namespace univ_dev
 
 				while (*curPos)
 				{
-					if (*curPos == ' ' || *curPos == '\t' || *curPos == '\n')
+					if (*curPos == L' ' || *curPos == L'\t' || *curPos == L'\n')
 					{
-						*curPos = '\0';
+						*curPos = L'\0';
 						break;
 					}
-					else if (*curPos == '/')
+					else if (*curPos == L'/')
 					{
-						if (*(curPos + 1) == '/')
+						if (*(curPos + 1) == L'/')
 						{
-							*curPos = '\0';
+							*curPos = L'\0';
 							break;
 						}
 					}
 					curPos++;
 				}
-
 				block->_ValueMap.insert(std::make_pair(keyString, valueString));
 			}
-
 		}
-
 		this->_SectionMap.insert(std::make_pair(block->_SectionName, block));
 	}
 

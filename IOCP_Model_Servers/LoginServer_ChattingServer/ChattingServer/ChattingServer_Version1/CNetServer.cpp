@@ -71,8 +71,8 @@ namespace univ_dev
 		DWORD flag = 0;
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		recvRet = WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		recvRet = WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
@@ -123,10 +123,11 @@ namespace univ_dev
 			sendWSABuf[i].len = packet->GetBufferSize();
 		}
 
-		InterlockedExchange(&session->_SendBufferCount, cnt);
+		//InterlockedExchange(&session->_SendBufferCount, cnt);
+		session->_SendPacketBuffer = cnt;
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		sendRet = WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		sendRet = WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
@@ -387,22 +388,6 @@ namespace univ_dev
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
 
-
-
-		// 초단위 로깅용 스레드 생성
-		//printf("PrintThread CreateBegin\n");
-		//fprintf(MainThreadLogFile, "PrintThread CreateBegin\n");
-		//this->_LogThread = (HANDLE)_beginthreadex(nullptr, 0, MoniteringThread, this, 0, nullptr);
-		//if (this->_LogThread == nullptr)
-		//{
-		//	InterlockedExchange(&this->_ServerOnFlag, false);
-		//	this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
-		//	this->_APIErrorCode = GetLastError();
-		//	return;
-		//}
-		//fprintf(MainThreadLogFile, "PrintThread CreateEnd\n");
-		//printf("PrintThread CreateEnd\n");
-		//fflush(MainThreadLogFile);
 
 		// --------------------------------------------------------------------------------------------------------------
 		// --------------------------------------------------------------------------------------------------------------
@@ -841,9 +826,11 @@ namespace univ_dev
 			timeOutTimer = timeGetTime();
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
-				if ((InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
-				if ((InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
-				if (timeOutTimer < InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0)) continue;
+				//if ((InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
+				//if ((InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
+				if ((this->_SessionArr[i]._IOCounts & 0x80000000) != 0)continue;
+				if ((this->_SessionArr[i]._Sock & 0x80000000) != 0) continue;
+				if (timeOutTimer <= InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0)) continue;
 				
 				this->OnTimeOut(this->_SessionArr[i]._SessionID);
 			}
@@ -1005,7 +992,8 @@ namespace univ_dev
 	}
 	void CNetServer::SetSessionTimer(Session* session)
 	{
-		InterlockedExchange(&session->_TimeOutTimer, timeGetTime() + _TimeOutClock);
+		session->__TimeoutTimer = timeGetTime() + _TimeOutClock;
+		//InterlockedExchange(&session->_TimeOutTimer, timeGetTime() + _TimeOutClock);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------

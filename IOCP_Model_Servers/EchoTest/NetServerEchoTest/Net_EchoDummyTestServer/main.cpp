@@ -6,9 +6,8 @@
 
 int main()
 {
-	
 	univ_dev::InitProfile();
-	if (!univ_dev::g_ConfigReader.init(L"_GameServerConfig.ini")) return -1;;
+	if (!univ_dev::g_ConfigReader.init(L"_GameServerConfig.ini")) return -1;
 
 	univ_dev::GameServer server;
 

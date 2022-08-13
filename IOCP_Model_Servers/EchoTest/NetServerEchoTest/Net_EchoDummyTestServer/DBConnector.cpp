@@ -9,8 +9,9 @@ namespace univ_dev
 {
 	DBConnector::DBConnector(const char* ip, const char* rootName, const char* rootPassword, const char* initSchema,unsigned int slowQuery, unsigned short port) : _DataBasePort(port) , _SlowQuery(slowQuery)
 	{
-		_DBLog.LOG_SET_LEVEL(LogClass::LogLevel::LOG_LEVEL_SYSTEM);
-		mysql_init(&_Conn);
+		this->SetDBLogDirectory(L"ServerLog\\DBLog");
+		this->_DBLog.LOG_SET_LEVEL(LogClass::LogLevel::LOG_LEVEL_SYSTEM);
+		mysql_init(&this->_Conn);
 
 		this->_DataBaseIP = inet_addr(ip);
 		strcpy_s(this->_DataBaseStringIP, ip);
@@ -21,7 +22,7 @@ namespace univ_dev
 
 	DBConnector::~DBConnector()
 	{
-		DBClose();
+		this->DBClose();
 	}
 
 	bool DBConnector::DBConnect()
@@ -29,11 +30,10 @@ namespace univ_dev
 		// DB 연결
 		int sslMode = SSL_MODE_DISABLED;
 		mysql_options(&this->_Conn, MYSQL_OPT_SSL_MODE, &sslMode);
-		this->_Connection = mysql_real_connect(&_Conn, this->_DataBaseStringIP, this->_RootName, this->_RootPassword, this->_SchemaName, this->_DataBasePort, (char*)NULL, 0);
-		//WCHAR errStr[QUERY_STRING_MAX_LEN];
+		this->_Connection = mysql_real_connect(&this->_Conn, this->_DataBaseStringIP, this->_RootName, this->_RootPassword, this->_SchemaName, this->_DataBasePort, (char*)NULL, 0);
 		if (this->_Connection == NULL)
 		{
-			DBLogError(L"Connect Error DB Quit");
+			this->DBLogError(L"Connect Error DB Quit");
 			return false;
 		}
 
@@ -45,27 +45,28 @@ namespace univ_dev
 	bool DBConnector::Query(const char* query)
 	{
 		// From 다음 DB에 존재하는 테이블 명으로 수정하세요
-		WCHAR wQuery[QUERY_STRING_MAX_LEN];
+		WCHAR wQuery[this->QUERY_STRING_MAX_LEN];
 		
 		size_t querySize = strlen(query);
-		mbstowcs_s(&querySize, wQuery, query, QUERY_STRING_MAX_LEN);
+		mbstowcs_s(&querySize, wQuery, query, this->QUERY_STRING_MAX_LEN);
 
 		DWORD queryBeginTime = timeGetTime();
 		int query_stat = mysql_query(this->_Connection, query);
 		DWORD queryEndTime = timeGetTime();
 		WCHAR errStr[512];
-		if (queryEndTime - queryBeginTime > _SlowQuery)
+		if (queryEndTime - queryBeginTime > this->_SlowQuery)
 		{
 			wsprintf(errStr, L"Query is too slow `%d` : %s", queryEndTime - queryBeginTime, wQuery);
-			DBLogSystem(errStr);
+			this->DBLogSystem(errStr);
 		}
 		if (query_stat != 0)
 		{
 			wsprintf(errStr, L"Query Failed : %s", wQuery);
-			DBLogError(errStr);
+			this->DBLogError(errStr);
+			this->DBConnect();
 			return false;
 		}
-		FreeResult(GetQueryResult());
+		this->FreeResult(this->GetQueryResult());
 
 		return true;
 	}
@@ -73,23 +74,24 @@ namespace univ_dev
 	bool DBConnector::QuerySave(const char* query)
 	{
 		// From 다음 DB에 존재하는 테이블 명으로 수정하세요
-		WCHAR wQuery[QUERY_STRING_MAX_LEN];
+		WCHAR wQuery[this->QUERY_STRING_MAX_LEN];
 
 		size_t querySize = strlen(query);
-		mbstowcs_s(&querySize,wQuery, query, QUERY_STRING_MAX_LEN);
+		mbstowcs_s(&querySize,wQuery, query, this->QUERY_STRING_MAX_LEN);
 		DWORD queryBeginTime = timeGetTime();
 		int query_stat = mysql_query(this->_Connection, query);
 		DWORD queryEndTime = timeGetTime();
 		WCHAR errStr[512];
-		if (queryEndTime - queryBeginTime > _SlowQuery)
+		if (queryEndTime - queryBeginTime > this->_SlowQuery)
 		{
 			wsprintf(errStr, L"Query is too slow `%d` : %s", queryEndTime - queryBeginTime, wQuery);
-			DBLogSystem(errStr);
+			this->DBLogSystem(errStr);
 		}
 		if (query_stat != 0)
 		{
 			wsprintf(errStr, L"Query Failed : %s", wQuery);
-			DBLogError(errStr);
+			this->DBLogError(errStr);
+			while (!this->DBConnect());
 			return false;
 		}
 
@@ -97,11 +99,11 @@ namespace univ_dev
 	}
 	void DBConnector::SetDBLogDirectory(const WCHAR* directory)
 	{
-		_DBLog.LOG_SET_DIRECTORY(directory);
+		this->_DBLog.LOG_SET_DIRECTORY(directory);
 	}
 	void DBConnector::DBLogError(const WCHAR* errorLog)
 	{
-		_DBLog.LOG(errorLog, LogClass::LogLevel::LOG_LEVEL_ERROR);
+		this->_DBLog.LOG(errorLog, LogClass::LogLevel::LOG_LEVEL_ERROR);
 	}
 
 	void DBConnector::DBLogSystem(const WCHAR* systemLog)
@@ -122,7 +124,7 @@ namespace univ_dev
 	MYSQL_RES* DBConnector::GetQueryResult()
 	{
 		MYSQL_RES* sqlResult;
-		sqlResult = mysql_store_result(_Connection);		// 결과 전체를 미리 가져옴
+		sqlResult = mysql_store_result(this->_Connection);		// 결과 전체를 미리 가져옴
 		//	sql_result=mysql_use_result(connection);		// fetch_row 호출시 1개씩 가져옴
 		return sqlResult;
 	}
@@ -140,19 +142,19 @@ namespace univ_dev
 
 	unsigned long DBConnector::GetMySqlErrno() const
 	{
-		return mysql_errno(_Connection);
+		return mysql_errno(this->_Connection);
 	}
 
 	//buffer를 넉넉히 준비하시오
 	const char* DBConnector::GetMySqlError()
 	{
-		return mysql_error(_Connection);
+		return mysql_error(this->_Connection);
 	}
 
 
 	void DBConnector::DBClose()
 	{
-		mysql_close(_Connection);
+		mysql_close(this->_Connection);
 	}
 
 }

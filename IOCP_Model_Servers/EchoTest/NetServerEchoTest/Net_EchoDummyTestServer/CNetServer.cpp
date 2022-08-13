@@ -118,14 +118,14 @@ namespace univ_dev
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		recvRet = WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		recvRet = WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
 			if (err != WSA_IO_PENDING)
 			{
-				if (err != 10053 && err != 10054 && err != 10064 /*&& err != 10038*/)
+				if (err != 10053 && err != 10054 && err != 10064 && err != 10038)
 				{
 					WCHAR errorStr[512];
 					wsprintf(errorStr, L"WSARecv ret is SOCKET_ERROR and error code is not WSA_IO_PENDING SessionID : %I64u", session->_SessionID);
@@ -170,11 +170,12 @@ namespace univ_dev
 			sendWSABuf[i].len = packet->GetBufferSize();
 		}
 
-		::InterlockedExchange(&session->_SendBufferCount, cnt);
+		session->_SendBufferCount = cnt;
+		//::InterlockedExchange(&session->_SendBufferCount, cnt);
 		::InterlockedIncrement(&session->_IOCounts);
 
-		SOCKET sock = ::InterlockedOr64((LONG64*)&session->_Sock, 0);
-		sendRet = ::WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
+		//SOCKET sock = ::InterlockedOr64((LONG64*)&session->_Sock, 0);
+		sendRet = ::WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = ::WSAGetLastError();
@@ -213,6 +214,7 @@ namespace univ_dev
 	// SendPacket -> Enqueuing Send Ringbuffer
 	void CNetServer::SendPacket(ULONGLONG sessionID, Packet* packet)
 	{
+		//Profiler profile("SendPacket");
 		packet->AddRef(); 
 		//올바른 세션인지 확인
 		Session* session = this->AcquireSession(sessionID);
@@ -223,8 +225,7 @@ namespace univ_dev
 		}
 		//그게 아니라면 정상 송신
 		packet->SetNetHeader();
-		_TotalSendPacketCount++;
-		//Profiler profile("SendPacket");
+		InterlockedIncrement(&this->_TotalSendPacketCount);
 		session->_SendPacketQueue.enqueue(packet);
 		//this->SendPost(session);
 		this->ReturnSession(session);
@@ -296,201 +297,6 @@ namespace univ_dev
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
 
-	bool CNetServer::InitEvents()
-	{
-		this->_MonitoringSignal = CreateEvent(nullptr, false, false, nullptr);
-		if (this->_MonitoringSignal == nullptr)
-		{
-			this->_ErrorCode = dfNCINIT_MONITORING_EVENT_CREATE_FAILED;
-			this->_APIErrorCode = 0;
-			return false;
-		}
-
-		this->_ThreadStartEvent = CreateEvent(nullptr, true, false, nullptr);
-		if (this->_ThreadStartEvent == nullptr)
-		{
-			this->_ErrorCode = dfNCINIT_RUNNING_EVENT_CREATE_FAILED;
-			this->_APIErrorCode = 0;
-			return false;
-		}
-		this->_LibraryLog.LOG(L"Event Create Success", SYSTEM);
-		printf("Event Create Success\n");
-		return true;
-	}
-
-	bool CNetServer::CreateMoniteringThread()
-	{
-		if (!g_ConfigReader.SetCurrentSection(L"NetServerConfig"))
-		{
-			this->_ErrorCode = dfNCINIT_CONFIG_READ_FAILED;
-			this->_APIErrorCode = __LINE__;
-			return false;
-		}
-		if (!g_ConfigReader.Find(L"MoniteringThreadOn"))
-		{
-			this->_ErrorCode = dfNCINIT_CONFIG_READ_FAILED;
-			this->_APIErrorCode = __LINE__;
-			return false;
-		}
-		this->_MoniteringFlag = g_ConfigReader.Get(L"MoniteringThreadOn", 1);
-		if (this->_MoniteringFlag)
-		{
-			size_t ret;
-			std::wstring serverIP;
-			char ip[20]{ 0 };
-			if (!g_ConfigReader.Find(L"MoniteringServerIP"))
-			{
-				this->_ErrorCode = dfNCINIT_CONFIG_READ_FAILED;
-				this->_APIErrorCode = __LINE__;
-				return false;
-			}
-			if (!g_ConfigReader.Find(L"MoniteringServerPort"))
-			{
-				this->_ErrorCode = dfNCINIT_CONFIG_READ_FAILED;
-				this->_APIErrorCode = __LINE__;
-				return false;
-			}
-
-			serverIP = g_ConfigReader.Get(L"MoniteringServerIP");
-			this->_MonitoringServerSession._SessionPort = g_ConfigReader.Get(L"MoniteringServerPort", 1);
-			::wcscpy_s(this->_MonitoringServerSession._SessionIPStr, serverIP.c_str());
-			::wcstombs_s(&ret, ip, this->_MonitoringServerSession._SessionIPStr, ::wcslen(this->_MonitoringServerSession._SessionIPStr));
-
-			this->_MonitoringServerSession._Sock = INVALID_SOCKET;
-			this->_MoniteringConnectThread = (HANDLE)::_beginthreadex(nullptr, 0, _NET_MoniteringConnectThread, this, 0, nullptr);
-			if (this->_MoniteringConnectThread == nullptr)
-			{
-				this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
-				this->_APIErrorCode = ::GetLastError();
-				return false;
-			}
-		}
-
-		this->_LibraryLog.LOG(L"Monitering Thread Create Success", SYSTEM);
-		printf("Monitering Thread Create Success\n");
-		return true;
-	}
-
-	bool CNetServer::CreateTimeOutThread()
-	{
-		this->_TimeOutThread = (HANDLE)_beginthreadex(nullptr, 0, _NET_TimeOutThread, this, 0, nullptr);
-		if (this->_TimeOutThread == nullptr)
-		{
-			this->_ErrorCode = dfNCINIT_LOG_THREAD_CREATE_FAILED;
-			this->_APIErrorCode = GetLastError();
-			return false;
-		}
-
-		this->_LibraryLog.LOG(L"Time Out Thread Create Success", SYSTEM);
-		printf("Time Out Thread Create Success\n");
-		return true;
-	}
-
-	bool CNetServer::CreateWorkerThread()
-	{
-		this->_WorkerThreads = new HANDLE[this->_ThreadPoolSize];
-		for (int i = 0; i < (int)this->_ThreadPoolSize; i++)
-		{
-			this->_WorkerThreads[i] = (HANDLE)_beginthreadex(NULL, 0, _NET_WorkerThread, this, 0, NULL);
-			if (this->_WorkerThreads[i] == NULL)
-			{
-				this->_ErrorCode = dfNCINIT_WORKER_THREAD_CREATE_FAILED_0 + i;
-				this->_APIErrorCode = GetLastError();
-				return false;
-			}
-			this->_LibraryLog.LOG(L"Worker Thread Create Success", SYSTEM);
-			printf("Worker Thread Create Success\n");
-		}
-
-		return true;
-	}
-
-	bool CNetServer::InitListenSocket()
-	{
-
-
-		if (this->_ThreadPoolSize <= 0)
-		{
-			SYSTEM_INFO info;
-			GetSystemInfo(&info);
-			this->_ThreadPoolSize = info.dwNumberOfProcessors * 2;
-		}
-
-		if (this->_RunningThreadCount > this->_ThreadPoolSize)
-			this->_RunningThreadCount = this->_ThreadPoolSize;
-		this->_IOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, _RunningThreadCount);
-		if (this->_IOCP == NULL)
-		{
-			this->_ErrorCode = dfNCINIT_IOCOMPLETIONPORT_CREATE_FAILED;
-			this->_APIErrorCode = GetLastError();
-			return false;
-		}
-
-
-		this->_ListenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		if (this->_ListenSocket == INVALID_SOCKET)
-		{
-			int err = WSAGetLastError();
-			this->_ErrorCode = dfNCINIT_LISTEN_SOCKET_CREATE_FAILED;
-			this->_APIErrorCode = err;
-			return false;
-		}
-
-		SOCKADDR_IN serveraddr;
-		ZeroMemory(&serveraddr, sizeof(serveraddr));
-		serveraddr.sin_family = AF_INET;
-		serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-		serveraddr.sin_port = htons(this->_ServerPort);
-		int bindRet = bind(this->_ListenSocket, (SOCKADDR*)&serveraddr, sizeof(serveraddr));
-		if (bindRet == SOCKET_ERROR)
-		{
-			int err = WSAGetLastError();
-			this->_APIErrorCode = err;
-			this->_ErrorCode = dfNCINIT_SOCKET_BIND_FAILED;
-			return false;
-		}
-
-		LINGER l;
-		l.l_onoff = 1;
-		l.l_linger = 0;
-		setsockopt(this->_ListenSocket, SOL_SOCKET, SO_LINGER, (const char*)&l, sizeof(l));
-
-		BOOL keppAliveFlag = 0;
-		setsockopt(this->_ListenSocket, SOL_SOCKET, SO_KEEPALIVE, (const char*)&keppAliveFlag, sizeof(BOOL));
-
-		DWORD sendBufferSize = 0;
-		setsockopt(this->_ListenSocket, SOL_SOCKET, SO_SNDBUF, (const char*)&sendBufferSize, sizeof(sendBufferSize));
-		if (this->_NagleOff)
-			setsockopt(this->_ListenSocket, IPPROTO_TCP, TCP_NODELAY, (const char*)&this->_NagleOff, sizeof(this->_NagleOff));
-
-		int listenRet = listen(this->_ListenSocket, this->_BackLogQueueSize);
-		if (listenRet == SOCKET_ERROR)
-		{
-			int err = WSAGetLastError();
-			this->_APIErrorCode = err;
-			this->_ErrorCode = dfNCINIT_SOCKET_LISTEN_FAILED;
-			return false;
-		}
-
-		this->_LibraryLog.LOG(L"Listen Socket Create Success", SYSTEM);
-		printf("Listen Socket Create Success\n");
-		return true;
-	}
-
-	bool CNetServer::CreateAcceptThread()
-	{
-		this->_AcceptThread = (HANDLE)_beginthreadex(nullptr, 0, _NET_AcceptThread, this, 0, nullptr);
-		if (this->_AcceptThread == nullptr)
-		{
-			this->_APIErrorCode = GetLastError();
-			this->_ErrorCode = dfNCINIT_ACCEPT_THREAD_CREATE_FAILED;
-			return false;
-		}
-
-		this->_LibraryLog.LOG(L"Accept Thread Create Success", SYSTEM);
-		printf("Accept Thread Create Success\n");
-		return true;
-	}
 
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -499,16 +305,16 @@ namespace univ_dev
 	{
 		WCHAR logStr[512];
 		int _ = _wmkdir(L"ServerLog");
-		_ = _wmkdir(L"ServerLog\\InitLog");
+		_ = _wmkdir(L"ServerLog\\LibraryLog");
 
 		timeBeginPeriod(1);
-
-		this->_LibraryLog.LOG_SET_DIRECTORY(L"ServerLog\\InitLog");
+		InitProfile();
+		this->_LibraryLog.LOG_SET_DIRECTORY(L"ServerLog\\LibraryLog");
 		this->_LibraryLog.LOG_SET_LEVEL(LogClass::LogLevel::LOG_LEVEL_SYSTEM);
 
 		if (this->_ServerOnFlag == true)
 		{
-			this->_ErrorCode = dfNCINIT_NET_CORE_ALREADY_EXIST;
+			this->_ErrorCode = dfNCINIT_NET_SERVER_ALREADY_EXIST;
 			this->_ServerOnFlag = false;
 			this->_LibraryLog.LOG(L"NetServer Already Running", LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 			return;
@@ -601,8 +407,8 @@ namespace univ_dev
 				this->_LibraryLog.LOG(L"Monitoring Thread Create Failed", LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 				return;
 			}
+			this->_LibraryLog.LOG(L"Monitoring Thread Created", LogClass::LogLevel::LOG_LEVEL_SYSTEM);
 		}
-		this->_LibraryLog.LOG(L"Monitoring Thread Created", LogClass::LogLevel::LOG_LEVEL_SYSTEM);
 
 
 
@@ -681,10 +487,11 @@ namespace univ_dev
 		setsockopt(this->_ListenSocket, SOL_SOCKET, SO_KEEPALIVE, (const char*)&keepAliveFlag, sizeof(BOOL));
 		this->_LibraryLog.LOG(L"Keep Alive Option Off", LogClass::LogLevel::LOG_LEVEL_SYSTEM);
 
-
-		//DWORD sendBufferSize = 1024 * 64;
-		//setsockopt(this->_ListenSocket, SOL_SOCKET, SO_SNDBUF, (const char*)&sendBufferSize, sizeof(sendBufferSize));
-		//this->_LibraryLog.LOG(L"Send Buffer Zero", LogClass::LogLevel::LOG_LEVEL_SYSTEM);
+		
+		DWORD sendBufferSize = 1024 * 64;
+		//DWORD sendBufferSize = 0;
+		setsockopt(this->_ListenSocket, SOL_SOCKET, SO_SNDBUF, (const char*)&sendBufferSize, sizeof(sendBufferSize));
+		this->_LibraryLog.LOG(L"Send Buffer Zero", LogClass::LogLevel::LOG_LEVEL_SYSTEM);
 
 
 		setsockopt(this->_ListenSocket, IPPROTO_TCP, TCP_NODELAY, (const char*)&this->_NagleOff, sizeof(this->_NagleOff));
@@ -702,6 +509,7 @@ namespace univ_dev
 			this->_LibraryLog.LOG(L"Listen Failed", LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 			return;
 		}
+		this->_LibraryLog.LOG(L"Listen Complete", LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 
 
 		this->_SessionArr = new Session[this->_MaxSessionCounts];
@@ -752,7 +560,6 @@ namespace univ_dev
 				ULONG_PTR completionKey = (ULONG_PTR)0xffffffff;
 				DWORD byteTransfered = 0;
 				PostQueuedCompletionStatus(this->_IOCP, byteTransfered, completionKey, nullptr);
-				printf("Accept Thread End\n");
 				return false;
 			}
 			wsprintf(errStr, L"TryAccept::WSAGetLastError return value is %u", err);
@@ -765,7 +572,6 @@ namespace univ_dev
 			this->_LibraryLog.LOG(L"Run Out Of Session IDX", LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 			clientSocket = INVALID_SOCKET;
 		}
-
 		return true;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -785,7 +591,7 @@ namespace univ_dev
 		if (pkRet1 != NET_HEADER_SIZE)
 		{
 			wsprintf(errStr, L"TryGetCompletedPacket::RB first Peek return value is NET_HEADER_SIZE sessionID is %llu",session->_SessionID);
-			this->DispatchError(dfNCWORKER_USE_SIZE_OVER_HEADER_SIZE_AND_FIRST_PEEK_ZERO, 0, errStr);
+			this->_LibraryLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 			this->DisconnectSession(session->_SessionID);
 			return false;
 		}
@@ -847,7 +653,9 @@ namespace univ_dev
 	void CNetServer::SendProc(Session* session, DWORD byteTransfered)
 	{
 		InterlockedAdd64((LONG64*)&this->_TotalProcessedBytes, byteTransfered + 20);
-		DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
+		//DWORD sendCount = InterlockedExchange(&session->_SendBufferCount, 0);
+		DWORD sendCount = session->_SendBufferCount;
+		session->_SendBufferCount = 0;
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{
@@ -856,6 +664,7 @@ namespace univ_dev
 		}
 		OnSend(session->_SessionID);
 		InterlockedExchange(&session->_IOFlag, false);
+		//session->_IOFlag = false;
 		//if (session->_SendPacketQueue.size() > 0)
 		//{
 		//	this->SendPost(session);
@@ -905,7 +714,7 @@ namespace univ_dev
 	unsigned int CNetServer::CNetServerAcceptThread(void* param)
 	{
 		this->_LibraryLog.LOG(L"AcceptThread On", SYSTEM);
-		ULONGLONG sessionID = 0;
+		ULONGLONG sessionID = 1;
 		SOCKET client_sock;
 		sockaddr_in clientaddr;
 		for (;;)
@@ -926,7 +735,7 @@ namespace univ_dev
 				::closesocket(client_sock);
 				continue;
 			}
-			Session* newSession = this->CreateSession(client_sock, clientaddr, ++sessionID);
+			Session* newSession = this->CreateSession(client_sock, clientaddr, sessionID++);
 			if (newSession == nullptr)
 			{
 				::closesocket(client_sock);
@@ -950,24 +759,27 @@ namespace univ_dev
 	unsigned int CNetServer::CNetServerTimeOutThread(void* param)
 	{
 		this->_LibraryLog.LOG(L"TimeOutThread On", SYSTEM);
+		WCHAR errStr[512];
 		while (!this->_ShutDownFlag)
 		{
 			this->_ServerTime = ::timeGetTime();
 			::Sleep(this->_TimeOutClock);
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
-				ULONGLONG sessionID = this->_SessionArr[i]._SessionID;
 				//if ((::InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
 				//if ((::InterlockedOr64((LONG64*)&this->_SessionArr[i]._Sock, 0) & 0x80000000) != 0) continue;
 				//if (::InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0) >= this->_ServerTime) continue;
-				if (this->_SessionArr[i]._IOCounts & 0x80000000 != 0) continue;
-				if (this->_SessionArr[i]._Sock & 0x80000000 != 0) continue;
+				ULONGLONG sessionID = this->_SessionArr[i]._SessionID;
+				if (this->_SessionArr[i]._IOCounts & 0x80000000) continue;
+				if (this->_SessionArr[i]._Sock& 0x80000000) continue;
 				if (this->_SessionArr[i]._TimeOutTimer >= this->_ServerTime) continue;
 				if (sessionID != _SessionArr[i]._SessionID) continue;
 				this->OnTimeOut(this->_SessionArr[i]._SessionID);
+				wsprintf(errStr, L"Time Out Session ID : %I64u / session TimeOut Timer : %u / curTime : %u", this->_SessionArr[i]._SessionID, this->_SessionArr[i]._TimeOutTimer, this->_ServerTime);
+				this->_LibraryLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_LIBRARY);
 			}
 		}
-		this->_LibraryLog.LOG(L"TimeOutThreadOff", SYSTEM);
+		this->_LibraryLog.LOG(L"TimeOutThread Off", SYSTEM);
 		return 0;
 	}
 
@@ -998,8 +810,6 @@ namespace univ_dev
 			Sleep(3);
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
-				if (!InterlockedOr((LONG*)&this->_SessionArr[i]._Available, 0))
-					continue;
 				Session* session = this->AcquireSession(this->_SessionArr[i]._SessionID);
 				if (session == nullptr)
 					continue;
@@ -1008,6 +818,7 @@ namespace univ_dev
 				this->ReturnSession(session);
 			}
 		}
+		this->_LibraryLog.LOG(L"SendThread Off", SYSTEM);
 		return 0;
 	}
 
@@ -1130,9 +941,7 @@ namespace univ_dev
 			if (GQCSRet != 0 && byteTransfered != 0)
 			{
 				if (job->_IsRecv)
-				{
 					this->RecvProc(session, byteTransfered);
-				}
 				else
 					this->SendProc(session, byteTransfered);
 			}
@@ -1207,17 +1016,22 @@ namespace univ_dev
 				this->ReleaseSession(session);
 			return nullptr;
 		}
-		
+		if (session->_Available == false)
+		{
+			if (InterlockedDecrement(&session->_IOCounts) == 0)
+				this->ReleaseSession(session);
+			return nullptr;
+		}
 		if (session->_SessionID != sessionID)
 		{
 			if (InterlockedDecrement(&session->_IOCounts) == 0)
 				this->ReleaseSession(session);
 			return nullptr;
 		}
-		if (session->_Available == false)
+		if ((session->_Sock & 0x80000000) != 0)
 		{
 			if (InterlockedDecrement(&session->_IOCounts) == 0)
-				this->ReleaseSession(session);
+				ReleaseSession(session);
 			return nullptr;
 		}
 		return session;
@@ -1252,16 +1066,17 @@ namespace univ_dev
 		newSession->_RingBuffer.ClearBuffer();
 		newSession->_SessionID = (sessionID << 16) | idx;
 		this->SetSessionTimer(newSession);
-		::InterlockedIncrement(&newSession->_IOCounts);
-		::InterlockedExchange(&newSession->_IOFlag, false);
-		//::InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
-		//::InterlockedExchange(&newSession->_Sock, sock);
-		//::InterlockedExchange(&newSession->_Available, true);
+		InterlockedIncrement(&newSession->_IOCounts);
+		InterlockedExchange(&newSession->_IOFlag, false);
+		//InterlockedAnd((long*)&newSession->_IOCounts, 0x7fffffff);
+		//InterlockedExchange(&newSession->_Sock, sock);
+		//InterlockedExchange(&newSession->_Available, true);
 		newSession->_IOCounts &= 0x7fffffff;
 		newSession->_Sock = sock;
 		newSession->_Available = true;
-		::CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
-		::InterlockedIncrement(&this->_CurSessionCount);
+
+		CreateIoCompletionPort((HANDLE)sock, this->_IOCP, (ULONG_PTR)newSession->_SessionID, 0);
+		InterlockedIncrement(&this->_CurSessionCount);
 		return newSession;
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1303,31 +1118,40 @@ namespace univ_dev
 	void CNetServer::ReleaseSession(Session* session)
 	{
 		ULONGLONG sessionID = session->_SessionID;
-		if (::InterlockedCompareExchange(&session->_IOCounts, 0x80000000, 0) != 0)
+		if (InterlockedCompareExchange(&session->_IOCounts, 0x80000000, 0) != 0)
 			return;
 		if (session->_SessionID != sessionID)
 			return;
-		//::InterlockedExchange(&session->_Available, false);
+		//InterlockedExchange(&session->_Available, false);
 		session->_Available = false;
 
 		DWORD idx = sessionID & 0xffff;
 		::closesocket(session->_Sock & 0x7fffffff);
 
+		//DWORD sendCount = ::InterlockedExchange(&session->_SendBufferCount, 0);
+		//Packet* packet = nullptr;
+		//for (int i = 0; i < (int)sendCount; i++)
+		//{
+		//	packet = session->_SendPacketBuffer[i];
+		//	Packet::Free(packet);
+		//}
+
 		DWORD sendCount = session->_SendBufferCount;
-		session->_SendBufferCount = 0;
 		Packet* packet = nullptr;
 		for (int i = 0; i < (int)sendCount; i++)
 		{
 			packet = session->_SendPacketBuffer[i];
 			Packet::Free(packet);
 		}
+		session->_SendBufferCount = 0;
+
 		while (session->_SendPacketQueue.dequeue(packet))
 			Packet::Free(packet);
-		::InterlockedExchange(&session->_IOFlag, false);
+		InterlockedExchange(&session->_IOFlag, false);
 		this->PostOnClientLeave(sessionID);
 		this->PushSessionIndex(idx);
-		::InterlockedDecrement(&this->_CurSessionCount);
-		::InterlockedIncrement(&this->_TotalReleaseSessionCount);
+		InterlockedDecrement(&this->_CurSessionCount);
+		InterlockedIncrement(&this->_TotalReleaseSessionCount);
 	}
 
 	//---------------------------------------------------------------------------------------------------------------------------------

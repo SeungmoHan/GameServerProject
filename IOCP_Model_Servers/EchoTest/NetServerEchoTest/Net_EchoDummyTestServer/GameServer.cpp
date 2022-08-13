@@ -269,8 +269,17 @@ namespace univ_dev
 		this->LockPlayerMap(SHARED_FALSE);
 		auto playerIter = this->_PlayerMap.find(sessionID);
 		if (playerIter != this->_PlayerMap.end())
+		{
+			Player* player = playerIter->second;
 			this->_PlayerMap.erase(playerIter);
-		return this->UnlockPlayerMap(SHARED_FALSE);
+			player->_Logined = false;
+			this->_PlayerPool.Free(player);
+		}
+		this->UnlockPlayerMap(SHARED_FALSE);
+
+		
+
+
 	}
 
 

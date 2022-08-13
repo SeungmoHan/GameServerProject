@@ -42,15 +42,6 @@ namespace univ_dev
 		void Cleanup();
 		//------------------------------------------------------------------------------------------------
 	private:
-		//init 함수들
-		bool InitEvents();
-		bool CreateMoniteringThread();
-		bool CreateTimeOutThread();
-		bool CreateWorkerThread();
-		bool InitListenSocket();
-		bool CreateAcceptThread();
-
-
 		//------------------------------------------------------------------------------------------------
 		// _beginthreadex함수에 전달되는 함수포인터들 param 은 this
 		friend unsigned __stdcall _NET_WorkerThread(void* param);
@@ -157,7 +148,7 @@ namespace univ_dev
 		//------------------------------------------------------------------------------------------------
 		inline void SetSessionTimer(Session* session)
 		{
-			InterlockedExchange(&session->_TimeOutTimer, timeGetTime());
+			//InterlockedExchange(&session->_TimeOutTimer, timeGetTime());
 			session->_TimeOutTimer = timeGetTime();
 		}
 
@@ -256,6 +247,7 @@ namespace univ_dev
 		
 		void PostServerStop()
 		{
+			this->_LibraryLog.LOG_SET_DIRECTORY(L"ServerLog\\InitLog");
 			this->_ShutDownFlag = true;
 			closesocket(this->_ListenSocket);
 		}

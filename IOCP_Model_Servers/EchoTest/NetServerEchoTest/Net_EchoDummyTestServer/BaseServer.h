@@ -26,14 +26,13 @@ namespace univ_dev
 			BasicThreadBlock(DWORD framePerSec, BaseServer* server, std::string _ThreadBlockName);
 
 			void Init();
-			inline void JobEnqueue(JobMessage& job)
+			inline void JobEnqueue(JobMessage job)
 			{
 				this->_JobQueue.enqueue(job);
 				SetEvent(this->_RunningEvent);
 			}
 			inline void Disconnect(ULONGLONG sessionID)
 			{
-				//this->MoveTo(sessionID, this->INVALID_THREAD_BLOCK_INDEX);
 				this->_BaseServer->DisconnectSession(sessionID);
 			}
 
@@ -151,15 +150,15 @@ namespace univ_dev
 		virtual void	OnTimeOut(ULONGLONG sessionID) = 0;
 		virtual void	OnSend(ULONGLONG sessionID) = 0;
 
-		friend unsigned __stdcall MoniteringThread(void* param);
-		unsigned int MoniteringThreadProc();
+		friend unsigned __stdcall MonitoringThread(void* param);
+		unsigned int MonitoringThreadProc();
 
 
 		LogClass											_BaseServerLog;
 		HardWareMoniter										_HardWareMoniter;
 		ProcessMoniter										_ProcessMoniter;
 
-		HANDLE												_MoniteringThread;
+		HANDLE												_MonitoringThread;
 		HANDLE												_ThreadBlockStartEvent;
 		DWORD												_ErrTlsIdx = -1;
 

@@ -25,7 +25,7 @@ namespace univ_dev
 	class Packet
 	{
 	protected:
-		static constexpr int MSS = 1460;
+		static constexpr int MSS = 256;
 		static constexpr int PACKET_CODE = 0x77;
 		static constexpr int FIXED_KEY = 0x32;
 

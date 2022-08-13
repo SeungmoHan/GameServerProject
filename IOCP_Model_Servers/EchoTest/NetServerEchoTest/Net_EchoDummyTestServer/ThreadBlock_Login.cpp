@@ -20,7 +20,7 @@ namespace univ_dev
 		if (err = this->DataBaseInit())
 		{
 			this->_LoginBlockLog.LOG(L"Database Init Failed", LogClass::LogLevel::LOG_LEVEL_ERROR);
-			CRASH();
+			//CRASH();
 		}
 	}
 
@@ -49,6 +49,12 @@ namespace univ_dev
 		this->_DBInitSchema = { tempInitSchema.begin(),tempInitSchema.end() };
 		this->_DBSlowQuery = g_ConfigReader.Get(L"DBSlowQuery", 1);
 		this->_DBPort = g_ConfigReader.Get(L"DBPort", 1);
+
+		if (this->_DBIPStr == "0.0.0.0")
+		{
+			this->_DataBase = nullptr;
+			return -9;
+		}
 
 		this->_DataBase = new DBConnector(this->_DBIPStr.c_str(), this->_DBRootName.c_str(), this->_DBRootPassword.c_str(), this->_DBInitSchema.c_str(), this->_DBSlowQuery, this->_DBPort);
 		if (!this->_DataBase->DBConnect()) return 8;
@@ -160,7 +166,7 @@ namespace univ_dev
 		{
 		case PACKET_TYPE::en_PACKET_CS_GAME_REQ_LOGIN:
 		{
-			PacketProcRequestLogin(sessionID, packet);
+			this->PacketProcRequestLogin(sessionID, packet);
 			break;
 		}
 		case PACKET_TYPE::en_PACKET_CS_GAME_REQ_ECHO:
@@ -178,6 +184,9 @@ namespace univ_dev
 		}
 		default:
 		{
+			WCHAR* errStr = this->_GameServer->GetErrString();
+			wsprintf(errStr, L"PacketProc Default Case SessionID : %I64u ,Type %u", sessionID, type);
+			this->_LoginBlockLog.LOG(errStr, LogClass::LogLevel::LOG_LEVEL_ERROR);
 			this->Disconnect(sessionID);
 			break;
 		}
@@ -189,12 +198,14 @@ namespace univ_dev
 		auto iter = this->_PlayerMap.find(sessionID);
 		if (iter == this->_PlayerMap.end())
 		{
+			this->_LoginBlockLog.LOG(L"PlayerMap.end()", LogClass::LogLevel::LOG_LEVEL_ERROR);
 			this->Disconnect(sessionID);
 			return;
 		}
 		Player* player = iter->second;
 		if (player->_Logined != false)
 		{
+			this->_LoginBlockLog.LOG(L"Not Logined Player", LogClass::LogLevel::LOG_LEVEL_ERROR);
 			this->Disconnect(sessionID);
 			return;
 		}
@@ -219,36 +230,51 @@ namespace univ_dev
 		sprintf_s(query, 512, "select accountno, userid, userpass, usernick from account where accountno = %I64d", accountNo);
 
 		DWORD dbBegin = timeGetTime();
-		this->_DataBase->QuerySave(query);
-		MYSQL_RES* result = this->_DataBase->GetQueryResult();
-		DWORD queryTime = timeGetTime() - dbBegin;
-
-		MYSQL_ROW row;
 		BYTE status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_FAIL;
-
-		do
+		if (this->_DataBase != nullptr)
 		{
-			if ((row = this->_DataBase->FetchRow(result)) == nullptr)
+			if (!this->_DataBase->QuerySave(query))
 			{
-				// DB에 세션 키가 없음
-				status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_ACCOUNT_MISS;
-				break;
+				WCHAR* errStr = this->_GameServer->GetErrString();
+				wsprintf(errStr, L"Critical Error/// DataBase Query Failed SessionID : %I64u Disconnect", sessionID);
+				this->_LoginBlockLog.LOG(L"DataBase Query Failed", LogClass::LogLevel::LOG_LEVEL_ERROR);
+				this->Disconnect(sessionID);
+				return;
 			}
-			//if (memcmp(tokenKey, row[2], this->TOKEN_KEY_SIZE) != 0) 
-			//{
-			//    //세션 키값이 다름
-			//    status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_ACCOUNT_MISS;
-			//    MakePacketResponseLogin(packet, accountNo, status, nullptr, nullptr);
-			//    break;
-			//}
+			MYSQL_RES* result = this->_DataBase->GetQueryResult();
+			DWORD queryTime = timeGetTime() - dbBegin;
 
-			size_t size;
+			MYSQL_ROW row;
+
+			do
+			{
+				if ((row = this->_DataBase->FetchRow(result)) == nullptr)
+				{
+					// DB에 세션 키가 없음
+					status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_ACCOUNT_MISS;
+					break;
+				}
+				//if (memcmp(tokenKey, row[2], this->TOKEN_KEY_SIZE) != 0) 
+				//{
+				//    //세션 키값이 다름
+				//    status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_ACCOUNT_MISS;
+				//    MakePacketResponseLogin(packet, accountNo, status, nullptr, nullptr);
+				//    break;
+				//}
+
+				size_t size;
+				status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_OK;
+				mbstowcs_s(&size, player->_ID, this->ID_MAX_LEN, row[1], _TRUNCATE);
+				mbstowcs_s(&size, player->_NickName, this->NICK_NAME_MAX_LEN, row[3], _TRUNCATE);
+				player->_Logined = true;
+			} while (0);
+			this->_DataBase->FreeResult(result);
+		}
+		else
+		{
 			status = en_PACKET_CS_LOGIN_RES_LOGIN::dfLOGIN_STATUS_OK;
-			mbstowcs_s(&size, player->_ID, this->ID_MAX_LEN, row[1], _TRUNCATE);
-			mbstowcs_s(&size, player->_NickName, this->NICK_NAME_MAX_LEN, row[3], _TRUNCATE);
 			player->_Logined = true;
-		} while (0);
-		this->_DataBase->FreeResult(result);
+		}
 
 		Packet* sendPacket = Packet::Alloc();
 		this->MakePacketResponseLogin(sendPacket, accountNo, status);
@@ -265,6 +291,7 @@ namespace univ_dev
 		this->MoveSessionToGameServer(sessionID);
 		this->SendPacket(sessionID, sendPacket);
 		this->_TotalAuth++;
+		//InterlockedIncrement(&this->_TotalAuth);
 	}
 
 	void AuthThreadBlock::MoveSessionToGameServer(ULONGLONG sessionID)
@@ -273,9 +300,11 @@ namespace univ_dev
 		this->_GameServer->MoveRequest(sessionID, this->GAME_BLOCK_NAME);
 	}
 
+#define LOGIN_TYPE_DECLAIR(name) WORD name = PACKET_TYPE::en_PACKET_CS_GAME_RES_LOGIN
 	void AuthThreadBlock::MakePacketResponseLogin(Packet* packet, INT64 accountNo, BYTE status)
 	{
-		WORD type = PACKET_TYPE::en_PACKET_CS_GAME_RES_LOGIN;
+		//WORD type = PACKET_TYPE::en_PACKET_CS_GAME_RES_LOGIN;
+		LOGIN_TYPE_DECLAIR(type);
 		(*packet) << type << status << accountNo;
 	}
 
@@ -288,9 +317,9 @@ namespace univ_dev
 		int curTime = ::time(nullptr);
 
 
-		//printf("|-------------------------------------Auth Block---------------------------------------\n");
-		//printf("| Total Auth / TPS : %llu / %llu\n", this->_TotalAuth, this->_TotalAuth - this->_LastTotalAuth);
-		//printf("| Auth Player / Auth Block FPS : %llu / %llu\n", this->_PlayerMap.size(), this->_TotalAuthBlockFPS - this->_LastAuthBlockFPS);
+		printf("|-------------------------------------Auth Block---------------------------------------\n");
+		printf("| Total Auth / TPS : %llu / %llu\n", this->_TotalAuth, this->_TotalAuth - this->_LastTotalAuth);
+		printf("| Auth Player / Auth Block FPS : %llu / %llu\n", this->_PlayerMap.size(), this->_TotalAuthBlockFPS - this->_LastAuthBlockFPS);
 
 		packet[packetCount] = Packet::Alloc();
 		this->MakePacketMoniteringInfo(packet[packetCount++],

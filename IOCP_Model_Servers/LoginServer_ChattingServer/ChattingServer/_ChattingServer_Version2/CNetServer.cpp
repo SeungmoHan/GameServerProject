@@ -69,8 +69,8 @@ namespace univ_dev
 		DWORD flag = 0;
 		ZeroMemory(&session->_RecvJob._Overlapped, sizeof(OVERLAPPED));
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		recvRet = WSARecv(sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		recvRet = WSARecv(session->_Sock, recvWSABuf, 2, nullptr, &flag, &session->_RecvJob._Overlapped, nullptr);
 		if (recvRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
@@ -120,11 +120,11 @@ namespace univ_dev
 			sendWSABuf[i].buf = (char*)packet->GetReadPtr();
 			sendWSABuf[i].len = packet->GetBufferSize();
 		}
-
-		InterlockedExchange(&session->_SendBufferCount, cnt);
+		session->_SendBufferCount = cnt;
+		//InterlockedExchange(&session->_SendBufferCount, cnt);
 		InterlockedIncrement(&session->_IOCounts);
-		SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
-		sendRet = WSASend(sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
+		//SOCKET sock = InterlockedOr64((LONG64*)&session->_Sock, 0);
+		sendRet = WSASend(session->_Sock, sendWSABuf, cnt, nullptr, 0, &session->_SendJob._Overlapped, nullptr);
 		if (sendRet == SOCKET_ERROR)
 		{
 			int err = WSAGetLastError();
@@ -840,8 +840,10 @@ namespace univ_dev
 			//얘가 쫒겨나가는 시간 - 지금 시간
 			for (int i = 0; i < this->_MaxSessionCounts; i++)
 			{
-				if ((InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
-				if (timeOutTimer < InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0)) continue;
+				//if ((InterlockedOr((LONG*)&this->_SessionArr[i]._IOCounts, 0) & 0x80000000) != 0) continue;
+				//if (timeOutTimer < InterlockedOr((LONG*)&this->_SessionArr[i]._TimeOutTimer, 0)) continue;
+				if ((this->_SessionArr[i]._IOCounts & 0x80000000) != 0) continue;
+				if (timeOutTimer <= this->_SessionArr[i]._TimeOutTimer) continue;
 				this->OnTimeOut(this->_SessionArr[i]._SessionID);
 			}
 		}
@@ -1006,7 +1008,8 @@ namespace univ_dev
 	}
 	void CNetServer::SetSessionTimer(Session* session)
 	{
-		InterlockedExchange(&session->_TimeOutTimer, timeGetTime() + _TimeOutClock);
+		session->_TimeOutTimer = timeGetTime() + _TimeOutClock;
+		//InterlockedExchange(&session->_TimeOutTimer, timeGetTime() + _TimeOutClock);
 	}
 	//---------------------------------------------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------------------------------------------
@@ -1027,27 +1030,6 @@ namespace univ_dev
 
 		newSession->_RecvJob._IsRecv = true;
 		newSession->_SendJob._IsRecv = false;
-		DWORD sendCount = InterlockedExchange(&newSession->_SendBufferCount, 0);
-		Packet* packet = nullptr;
-		WCHAR errStr[512];
-		if (sendCount != 0)
-		{
-			wsprintf(errStr, L"Session %llu SendPacketBuffer is not Cleaned Up size : %d", (sessionID << 16) | idx, sendCount);
-			DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, (sessionID << 16) | idx, errStr);
-			for (int i = 0; i < (int)sendCount; i++)
-			{
-				packet = newSession->_SendPacketBuffer[i];
-				Packet::Free(packet);
-			}
-		}
-		int sendQueueSize = newSession->_SendPacketQueue.size();
-		if (sendQueueSize != 0)
-		{
-			wsprintf(errStr, L"Session %llu LockFreeQueue is not Cleaned Up size : %d", (sessionID << 16) | idx, newSession->_SendPacketQueue.size());
-			DispatchError(dfNCACCEPT_SESSION_ID_NOT_CLEANUP, (sessionID << 16) | idx, errStr);
-			while (newSession->_SendPacketQueue.dequeue(packet))
-				Packet::Free(packet);
-		}
 		SetSessionTimer(newSession);
 		newSession->_RingBuffer.ClearBuffer();
 		newSession->_SessionID = (sessionID << 16) | idx;

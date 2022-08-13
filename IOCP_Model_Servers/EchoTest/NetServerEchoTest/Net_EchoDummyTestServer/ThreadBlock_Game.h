@@ -37,7 +37,7 @@ namespace univ_dev
 		void OnThreadBlockStop()final;
 
 
-		void PacketProc(ULONGLONG sessionID, Packet* packet, WORD type);
+		void PacketProc(ULONGLONG sessionID, Packet* packet);
 
 		void PacketProcEchoRequest(ULONGLONG sessionID, Packet* packet);
 
